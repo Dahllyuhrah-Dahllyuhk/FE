@@ -9,8 +9,14 @@ import { BottomNav } from '@/components/bottom-nav';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
-import { fetchAllCalendarEvents } from '@/lib/api'; // ✅ 변경: 전체 기간 전용
-import type { RawCalendarEvent } from '@/types/calendar'; // Raw 타입만 사용
+import {
+  fetchAllCalendarEvents,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+} from '@/lib/api'; // ✅ 변경: 전체 기간 전용 및 CRUD 함수 추가
+import { mapRawToCalendarEvent } from '@/lib/calendar-utils';
+import type { RawCalendarEvent } from '@/types/calendar';
 
 // 화면에서 쓰는 이벤트 타입 (로컬 정의: 외부 의존 제거)
 export type Event = {
@@ -35,51 +41,19 @@ export default function HomePage() {
     end: Date;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [colorMap, setColorMap] = useState<Map<string, string>>(new Map());
   const isMobile = useIsMobile();
 
   // 서버 응답 → 화면용 이벤트로 변환
   const mapRaw = (list: RawCalendarEvent[]): Event[] => {
-    const palette = [
-      'bg-blue-500',
-      'bg-purple-500',
-      'bg-green-500',
-      'bg-orange-500',
-      'bg-pink-500',
-    ];
-
     return list
       .map((raw, idx) => {
-        // epoch(ms) 우선 → 없으면 ISO 파싱
-        const startMs =
-          typeof raw.startTimestamp === 'number'
-            ? raw.startTimestamp
-            : raw.start
-            ? Date.parse(raw.start)
-            : NaN;
-        const endMs =
-          typeof raw.endTimestamp === 'number'
-            ? raw.endTimestamp
-            : raw.end
-            ? Date.parse(raw.end)
-            : NaN;
-
-        let startDate = new Date(startMs);
-        let endDate = new Date(endMs);
-
-        // 종일이면 end는 익일 00:00(exclusive) → 표시용 -1ms 보정
-        if (raw.allDay && !Number.isNaN(endMs)) {
-          endDate = new Date(endDate.getTime() - 1);
-        }
-
+        const baseEvent = mapRawToCalendarEvent(raw, idx);
+        const existingColor = colorMap.get(raw.id);
         return {
-          id: raw.id,
-          title: raw.title ?? 'Untitled',
-          description: (raw as any).description ?? '',
-          startDate,
-          endDate,
-          color: palette[idx % palette.length],
-          allDay: raw.allDay,
-        } as Event;
+          ...baseEvent,
+          color: existingColor || baseEvent.color,
+        };
       })
       .filter(
         (e) =>
@@ -128,23 +102,99 @@ export default function HomePage() {
     setIsDialogOpen(true);
   };
 
-  const handleSaveEvent = (event: Event) => {
-    if (selectedEvent) {
-      setEvents((prev) => prev.map((e) => (e.id === event.id ? event : e)));
-    } else {
-      setEvents((prev) => [...prev, { ...event, id: Date.now().toString() }]);
-    }
+  const handleSaveEvent = async (event: Event) => {
     setIsDialogOpen(false);
+    if (event.id) {
+      setColorMap((prev) => new Map(prev).set(event.id, event.color));
+    }
     setSelectedEvent(null);
     setSelectedDateRange(null);
     setIsEditMode(false);
+
+    try {
+      setError(null);
+
+      const formatToISO = (
+        date: Date,
+        allDay: boolean,
+        isEndDate: boolean
+      ): string => {
+        if (allDay) {
+          const dateToUse = isEndDate
+            ? new Date(date.getTime() + 24 * 60 * 60 * 1000)
+            : date;
+          const year = dateToUse.getFullYear();
+          const month = String(dateToUse.getMonth() + 1).padStart(2, '0');
+          const day = String(dateToUse.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        } else {
+          return date.toISOString();
+        }
+      };
+
+      const isAllDay = Boolean(event.allDay);
+
+      const requestPayload = {
+        title: event.title || '무제',
+        description: event.description || '',
+        start: formatToISO(event.startDate, isAllDay, false),
+        end: formatToISO(event.endDate, isAllDay, isAllDay),
+        allDay: isAllDay,
+        timeZone: 'Asia/Seoul',
+      };
+
+      if (selectedEvent) {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === selectedEvent.id ? { ...event, id: selectedEvent.id } : e
+          )
+        );
+        await updateCalendarEvent(selectedEvent.id, requestPayload);
+      } else {
+        const tempId = `temp-${Date.now()}`;
+        setEvents((prev) => [...prev, { ...event, id: tempId }]);
+        const created = await createCalendarEvent(requestPayload);
+        if (created?.id) {
+          setColorMap((prev) => new Map(prev).set(created.id, event.color));
+        }
+      }
+
+      const raw = await fetchAllCalendarEvents();
+      setEvents(mapRaw(raw as RawCalendarEvent[]));
+    } catch (err: any) {
+      setError(err?.message ?? '일정 저장 중 오류가 발생했습니다');
+      const raw = await fetchAllCalendarEvents();
+      setEvents(mapRaw(raw as RawCalendarEvent[]));
+    }
   };
 
-  const handleDeleteEvent = (eventId: string) => {
-    setEvents((prev) => prev.filter((e) => e.id !== eventId));
+  const handleDeleteEvent = async (eventId: string) => {
     setIsDetailModalOpen(false);
     setIsDialogOpen(false);
     setSelectedEvent(null);
+
+    try {
+      setError(null);
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      setColorMap((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(eventId);
+        return newMap;
+      });
+
+      await deleteCalendarEvent(eventId);
+
+      const raw = await fetchAllCalendarEvents();
+      setEvents(mapRaw(raw as RawCalendarEvent[]));
+    } catch (err: any) {
+      if (err?.message?.includes('410')) {
+        setError('이미 삭제된 일정입니다. 동기화를 진행합니다.');
+      } else {
+        setError(err?.message ?? '일정 삭제 중 오류가 발생했습니다');
+      }
+      const raw = await fetchAllCalendarEvents();
+      setEvents(mapRaw(raw as RawCalendarEvent[]));
+    }
   };
 
   // 동기화 버튼: DB를 갱신하고 전체 재조회
@@ -212,6 +262,7 @@ export default function HomePage() {
           )}
 
           <Calendar
+            events={events}
             onEventDoubleClick={handleEventClick}
             onDateRangeSelect={handleDateRangeSelect}
           />

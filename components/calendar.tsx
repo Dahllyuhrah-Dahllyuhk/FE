@@ -6,8 +6,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { fetchAllCalendarEvents } from '@/lib/api';
-import { mapRawToCalendarEvent, buildMonthGrid } from '@/lib/calendar-utils';
+import { buildMonthGrid } from '@/lib/calendar-utils'; // Import buildMonthGrid function
 
 /* ===== 로컬 타입 (외부 의존 제거) ===== */
 export type CalendarEvent = {
@@ -107,6 +106,7 @@ const assignRowsToMultiDayEvents = (
 
 /* ===== Props ===== */
 type Props = {
+  events: CalendarEvent[];
   onEventDoubleClick: (event: CalendarEvent) => void;
   onDateRangeSelect: (start: Date, end: Date) => void;
 };
@@ -119,9 +119,12 @@ const fmtTime = (d: Date) =>
   }).format(d);
 
 /* ===== 컴포넌트 ===== */
-export function Calendar({ onEventDoubleClick, onDateRangeSelect }: Props) {
+export function Calendar({
+  events,
+  onEventDoubleClick,
+  onDateRangeSelect,
+}: Props) {
   // 상태
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(new Date()); // 가운데(기준) 달
   const [displayMonths, setDisplayMonths] = useState<Date[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -147,37 +150,18 @@ export function Calendar({ onEventDoubleClick, onDateRangeSelect }: Props) {
   const isUpdatingScrollRef = useRef(false);
   const isMobile = useIsMobile();
 
-  /* 1) 모든 이벤트 1회 로드 + 초기 월 윈도우 만들기 (전체 기간 조회) */
+  /* 1) 초기 월 윈도우 만들기 (데이터 fetching 제거) */
   useEffect(() => {
-    (async () => {
-      const raw = await fetchAllCalendarEvents(); // ❗️쿼리 없이 전체 기간
-      const mapped: CalendarEvent[] = raw
-        .map((r: any, i: number) => mapRawToCalendarEvent(r, i))
-        .filter(
-          (ev: CalendarEvent) =>
-            !Number.isNaN(ev.startDate.getTime()) &&
-            !Number.isNaN(ev.endDate.getTime())
-        )
-        .sort(
-          (a: CalendarEvent, b: CalendarEvent) =>
-            a.startDate.getTime() - b.startDate.getTime()
-        );
-
-      setEvents(mapped);
-
-      // 오늘 기준 ±N개월 렌더
-      const now = new Date();
-      const months: Date[] = [];
-      for (let i = -INITIAL_BEFORE; i <= INITIAL_AFTER; i++) {
-        months.push(new Date(now.getFullYear(), now.getMonth() + i, 1));
-      }
-      setDisplayMonths(months);
-      setCurrentDate(now);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const now = new Date();
+    const months: Date[] = [];
+    for (let i = -INITIAL_BEFORE; i <= INITIAL_AFTER; i++) {
+      months.push(new Date(now.getFullYear(), now.getMonth() + i, 1));
+    }
+    setDisplayMonths(months);
+    setCurrentDate(now);
   }, []);
 
-  /* 2) 현재 달 카드로 스크롤(초기 위치를 가운데로) → 위/아래 확장 가능 */
+  /* 2) 현재 달 카드로 스크롤(초기 위치를 가���데로) → 위/아래 확장 가능 */
   useEffect(() => {
     if (!isInitialLoad || displayMonths.length === 0) return;
 

@@ -1,61 +1,74 @@
-"use client"
+'use client';
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import type { Event } from "@/types/calendar"
+import { useState, useEffect } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import type { Event } from '@/types/calendar';
 
 type EventDialogProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  event: Event | null
-  dateRange: { start: Date; end: Date } | null
-  onSave: (event: Event) => void
-  onDelete: (eventId: string) => void
-}
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  event: Event | null;
+  dateRange: { start: Date; end: Date } | null;
+  onSave: (event: Event) => void;
+  onDelete: (eventId: string) => void;
+};
 
 const colors = [
-  { name: "파랑", value: "bg-blue-500" },
-  { name: "보라", value: "bg-purple-500" },
-  { name: "초록", value: "bg-green-500" },
-  { name: "빨강", value: "bg-red-500" },
-  { name: "주황", value: "bg-orange-500" },
-]
+  { name: '파랑', value: 'bg-blue-500' },
+  { name: '보라', value: 'bg-purple-500' },
+  { name: '초록', value: 'bg-green-500' },
+  { name: '빨강', value: 'bg-red-500' },
+  { name: '주황', value: 'bg-orange-500' },
+];
 
-export function EventDialog({ open, onOpenChange, event, dateRange, onSave, onDelete }: EventDialogProps) {
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
-  const [color, setColor] = useState("bg-blue-500")
+export function EventDialog({
+  open,
+  onOpenChange,
+  event,
+  dateRange,
+  onSave,
+  onDelete,
+}: EventDialogProps) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [color, setColor] = useState('bg-blue-500');
 
   useEffect(() => {
     if (event) {
-      setTitle(event.title)
-      setDescription(event.description)
-      setStartDate(formatDateTimeLocal(event.startDate))
-      setEndDate(formatDateTimeLocal(event.endDate))
-      setColor(event.color)
+      setTitle(event.title);
+      setDescription(event.description);
+      setStartDate(formatDateTimeLocal(event.startDate));
+      setEndDate(formatDateTimeLocal(event.endDate));
+      setColor(event.color);
     } else if (dateRange) {
-      setTitle("")
-      setDescription("")
-      setStartDate(formatDateTimeLocal(dateRange.start))
-      setEndDate(formatDateTimeLocal(dateRange.end))
-      setColor("bg-blue-500")
+      setTitle('');
+      setDescription('');
+      setStartDate(formatDateTimeLocal(dateRange.start));
+      setEndDate(formatDateTimeLocal(dateRange.end));
+      setColor('bg-blue-500');
     }
-  }, [event, dateRange])
+  }, [event, dateRange]);
 
   const formatDateTimeLocal = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    const hours = String(date.getHours()).padStart(2, "0")
-    const minutes = String(date.getMinutes()).padStart(2, "0")
-    return `${year}-${month}-${day}T${hours}:${minutes}`
-  }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
 
   const handleSave = () => {
     const newEvent: Event = {
@@ -65,36 +78,41 @@ export function EventDialog({ open, onOpenChange, event, dateRange, onSave, onDe
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       color,
-    }
-    onSave(newEvent)
-    resetForm()
-  }
+    };
+    onSave(newEvent);
+    resetForm();
+  };
 
   const handleDelete = () => {
     if (event) {
-      onDelete(event.id)
-      resetForm()
+      onDelete(event.id);
+      resetForm();
     }
-  }
+  };
 
   const resetForm = () => {
-    setTitle("")
-    setDescription("")
-    setStartDate("")
-    setEndDate("")
-    setColor("bg-blue-500")
-  }
+    setTitle('');
+    setDescription('');
+    setStartDate('');
+    setEndDate('');
+    setColor('bg-blue-500');
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{event ? "일정 편집" : "새 일정"}</DialogTitle>
+          <DialogTitle>{event ? '일정 편집' : '새 일정'}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="title">제목</Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="일정 제목" />
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="일정 제목"
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="description">설명</Label>
@@ -108,11 +126,21 @@ export function EventDialog({ open, onOpenChange, event, dateRange, onSave, onDe
           </div>
           <div className="grid gap-2">
             <Label htmlFor="start">시작 시간</Label>
-            <Input id="start" type="datetime-local" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <Input
+              id="start"
+              type="datetime-local"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="end">종료 시간</Label>
-            <Input id="end" type="datetime-local" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            <Input
+              id="end"
+              type="datetime-local"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
           </div>
           <div className="grid gap-2">
             <Label>색상</Label>
@@ -121,7 +149,9 @@ export function EventDialog({ open, onOpenChange, event, dateRange, onSave, onDe
                 <button
                   key={c.value}
                   className={`h-8 w-8 rounded-full ${c.value} ${
-                    color === c.value ? "ring-2 ring-foreground ring-offset-2" : ""
+                    color === c.value
+                      ? 'ring-2 ring-foreground ring-offset-2'
+                      : ''
                   }`}
                   onClick={() => setColor(c.value)}
                   type="button"
@@ -132,7 +162,11 @@ export function EventDialog({ open, onOpenChange, event, dateRange, onSave, onDe
         </div>
         <DialogFooter className="flex-col gap-2 sm:flex-row">
           {event && (
-            <Button variant="destructive" onClick={handleDelete} className="sm:mr-auto">
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              className="sm:mr-auto"
+            >
               삭제
             </Button>
           )}
@@ -143,5 +177,5 @@ export function EventDialog({ open, onOpenChange, event, dateRange, onSave, onDe
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
