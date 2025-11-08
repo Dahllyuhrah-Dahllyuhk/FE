@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react"
 import { Card } from "@/components/ui/card"
-import type { Event } from "@/app/page"
+import type { Event } from "@/types/calendar"
 
 type MobileCalendarListProps = {
   events: Event[]

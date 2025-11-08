@@ -3,7 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Trash2 } from "lucide-react"
-import type { Event } from "@/app/page"
+import type { Event } from "@/types/calendar"
 
 type EventDetailModalProps = {
   open: boolean
