@@ -1,12 +1,12 @@
 // FE/src/api/calendar.ts
-import type { CalendarEventDto } from '@/types/calendar';
+import type { RawCalendarEvent } from '@/types/calendar';
 
 const BE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';
 
 export async function fetchEvents(range?: {
   start: string;
   end: string;
-}): Promise<CalendarEventDto[]> {
+}): Promise<RawCalendarEvent[]> {
   const qs = range
     ? `?start=${encodeURIComponent(range.start)}&end=${encodeURIComponent(
         range.end

@@ -161,7 +161,7 @@ export function Calendar({
     setCurrentDate(now);
   }, []);
 
-  /* 2) 현재 달 카드로 스크롤(초기 위치를 가���데로) → 위/아래 확장 가능 */
+  /* 2) 현재 달 카드로 스크롤(초기 위치를 가운데로) → 위/아래 확장 가능 */
   useEffect(() => {
     if (!isInitialLoad || displayMonths.length === 0) return;
 
@@ -563,11 +563,10 @@ export function Calendar({
                                         evt.id
                                       }-${cellDate.getTime()}`}
                                       data-event-clickable
-                                      className={`${evt.color} absolute left-2 right-[-4px] rounded-full px-3 py-1 text-xs font-medium text-white shadow-sm transition-transform hover:scale-[1.02] cursor-pointer z-10 flex items-center overflow-hidden whitespace-nowrap`}
+                                      className={`${evt.color} absolute left-2 right-[-4px] rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-sm transition-transform hover:scale-105 cursor-pointer z-10 flex items-center overflow-hidden whitespace-nowrap`}
                                       style={{
                                         width: `calc(${widthPercent}% + ${gapAdjustment}px)`,
                                         top: `${topPosition}px`,
-                                        minHeight: '20px',
                                       }}
                                       onClick={(
                                         e: React.MouseEvent<HTMLDivElement>
@@ -714,18 +713,17 @@ export function Calendar({
           <div
             className="bg-background rounded-t-3xl w-full flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300"
             style={{
-              // Dynamic height based on event count: 1 event = ~200px, 2-3 = ~400px, 4+ = 70vh
               maxHeight:
                 bottomSheetEvents.length === 1
-                  ? '40vh'
+                  ? '55vh'
                   : bottomSheetEvents.length <= 3
-                  ? '60vh'
+                  ? '70vh'
                   : '85vh',
               minHeight:
                 bottomSheetEvents.length === 1
-                  ? '250px'
+                  ? '350px'
                   : bottomSheetEvents.length <= 3
-                  ? '450px'
+                  ? '550px'
                   : '75vh',
             }}
             onPointerDown={(e) => e.stopPropagation()}
