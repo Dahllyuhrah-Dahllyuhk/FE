@@ -51,6 +51,7 @@ export async function createCalendarEvent(req: {
   end: string;
   allDay?: boolean;
   timeZone?: string;
+  color?: string;
 }): Promise<any> {
   const url = `${API_BASE}/api/calendar/events`;
   const res = await fetch(url, {
@@ -86,6 +87,7 @@ export async function updateCalendarEvent(
     end: string;
     allDay?: boolean;
     timeZone?: string;
+    color?: string;
   }
 ): Promise<any> {
   const url = `${API_BASE}/api/calendar/events/${eventId}`;

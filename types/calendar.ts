@@ -12,6 +12,9 @@ export type RawCalendarEvent = {
   endTimestamp?: number;
   allDay?: boolean;
   timeZone?: string;
+
+  /** BE에서 내려주는 색상(Tailwind 클래스 등) */
+  color?: string | null;
 };
 
 export type Event = {

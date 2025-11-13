@@ -8,6 +8,12 @@ export function mapRawToCalendarEvent(raw: any, idx: number) {
     'bg-pink-500',
   ];
 
+  const serverColor: string | undefined = raw.color ?? undefined;
+  const baseColor =
+    serverColor && serverColor.trim().length > 0
+      ? serverColor.trim()
+      : palette[idx % palette.length];
+
   // allDay인 경우: 날짜 문자열을 신뢰해 로컬 자정으로 변환
   if (raw.allDay) {
     const startStr: string | undefined = raw.start;

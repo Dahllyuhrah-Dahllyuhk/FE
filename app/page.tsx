@@ -142,6 +142,7 @@ export default function HomePage() {
         end: formatToISO(event.endDate, isAllDay, isAllDay),
         allDay: isAllDay,
         timeZone: 'Asia/Seoul',
+        color: event.color,
       };
 
       if (selectedEvent) {
@@ -205,6 +206,23 @@ export default function HomePage() {
     window.location.href = `${API_BASE}/oauth2/authorization/google`;
   };
 
+  const handleCreateNewEventFromBottomSheet = (date: Date) => {
+    setSelectedDateRange({
+      start: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
+      end: new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+        23,
+        59,
+        59
+      ),
+    });
+    setSelectedEvent(null);
+    setIsEditMode(true);
+    setIsDialogOpen(true);
+  };
+
   if (isLoading) {
     return (
       <ProtectedRoute>
@@ -247,6 +265,7 @@ export default function HomePage() {
               events={events}
               onEventDoubleClick={handleEventClick}
               onDateRangeSelect={handleDateRangeSelect}
+              onCreateNewEvent={handleCreateNewEventFromBottomSheet}
             />
           </div>
         </main>
