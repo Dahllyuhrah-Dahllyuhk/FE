@@ -8,6 +8,7 @@ import { EventDetailModal } from '@/components/event-detail-modal';
 import { BottomNav } from '@/components/bottom-nav';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ProtectedRoute } from '@/components/protected-route'; // ✅ 변경: ProtectedRoute 추가
 
 import {
   fetchAllCalendarEvents,
@@ -197,96 +198,78 @@ export default function HomePage() {
     }
   };
 
-  // 동기화 버튼: DB를 갱신하고 전체 재조회
-  const syncNow = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const API_BASE =
-        process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
-
-      const res = await fetch(`${API_BASE}/api/calendar/sync`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { Accept: 'application/json' },
-      });
-
-      if (res.status === 401) {
-        window.location.href = `${API_BASE}/oauth2/authorization/google`;
-        return;
-      }
-      if (!res.ok) throw new Error('동기화 실패');
-
-      const raw = await fetchAllCalendarEvents(); // ✅ 다시 전체 로드
-      setEvents(mapRaw(raw as RawCalendarEvent[]));
-    } catch (e: any) {
-      setError(e?.message ?? '동기화 중 오류가 발생했습니다');
-    } finally {
-      setIsLoading(false);
-    }
+  const syncNow = () => {
+    const API_BASE =
+      process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';
+    // ✅ 동기화 버튼을 눌렀을 때만 구글 OAuth 시작
+    window.location.href = `${API_BASE}/oauth2/authorization/google`;
   };
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent" />
-          <p className="text-foreground">로딩 중...</p>
+      <ProtectedRoute>
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="text-center">
+            <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent" />
+            <p className="text-foreground">로딩 중...</p>
+          </div>
         </div>
-      </div>
+      </ProtectedRoute>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-16">
-      <header className="border-b border-border bg-card px-4 py-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">캘린더</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={syncNow}
-            className="rounded-md border px-3 py-1 text-sm hover:bg-accent"
-            title="구글 캘린더에서 최신 일정 동기화"
-          >
-            동기화
-          </button>
-          <ThemeToggle />
-        </div>
-      </header>
+    <ProtectedRoute>
+      <div className="flex min-h-screen flex-col bg-background pb-16">
+        <header className="border-b border-border bg-card px-4 py-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-foreground">캘린더</h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={syncNow}
+              className="rounded-md border px-3 py-1 text-sm hover:bg-accent"
+              title="구글 캘린더에서 최신 일정 동기화"
+            >
+              동기화
+            </button>
+            <ThemeToggle />
+          </div>
+        </header>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-4">
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4">
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-          <Calendar
-            events={events}
-            onEventDoubleClick={handleEventClick}
-            onDateRangeSelect={handleDateRangeSelect}
-          />
-        </div>
-      </main>
+            <Calendar
+              events={events}
+              onEventDoubleClick={handleEventClick}
+              onDateRangeSelect={handleDateRangeSelect}
+            />
+          </div>
+        </main>
 
-      <EventDetailModal
-        open={isDetailModalOpen}
-        onOpenChange={setIsDetailModalOpen}
-        event={selectedEvent}
-        onDelete={handleDeleteEvent}
-        onEdit={handleEditEvent}
-      />
+        <EventDetailModal
+          open={isDetailModalOpen}
+          onOpenChange={setIsDetailModalOpen}
+          event={selectedEvent}
+          onDelete={handleDeleteEvent}
+          onEdit={handleEditEvent}
+        />
 
-      <EventDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        event={isEditMode ? selectedEvent : null}
-        dateRange={isEditMode ? selectedDateRange : null}
-        onSave={handleSaveEvent}
-        onDelete={handleDeleteEvent}
-      />
+        <EventDialog
+          open={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          event={isEditMode ? selectedEvent : null}
+          dateRange={isEditMode ? selectedDateRange : null}
+          onSave={handleSaveEvent}
+          onDelete={handleDeleteEvent}
+        />
 
-      <BottomNav />
-    </div>
+        <BottomNav />
+      </div>
+    </ProtectedRoute>
   );
 }
