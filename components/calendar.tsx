@@ -2,7 +2,7 @@
 
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -109,20 +109,15 @@ type Props = {
   events: CalendarEvent[];
   onEventDoubleClick: (event: CalendarEvent) => void;
   onDateRangeSelect: (start: Date, end: Date) => void;
+  onCreateNewEvent?: (date: Date) => void;
 };
-
-const fmtTime = (d: Date) =>
-  new Intl.DateTimeFormat('ko-KR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(d);
 
 /* ===== 컴포넌트 ===== */
 export function Calendar({
   events,
   onEventDoubleClick,
   onDateRangeSelect,
+  onCreateNewEvent,
 }: Props) {
   // 상태
   const [currentDate, setCurrentDate] = useState<Date>(new Date()); // 가운데(기준) 달
@@ -685,6 +680,13 @@ export function Calendar({
     );
   };
 
+  const fmtTime = (d: Date) =>
+    new Intl.DateTimeFormat('ko-KR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
+
   return (
     <>
       <div
@@ -734,17 +736,34 @@ export function Calendar({
               <h3 className="text-lg font-bold">
                 {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일
               </h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setSelectedDate(null);
-                  setBottomSheetEvents([]);
-                  bottomSheetOpenRef.current = false;
-                }}
-              >
-                <X className="h-5 w-5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSelectedDate(null);
+                    setBottomSheetEvents([]);
+                    bottomSheetOpenRef.current = false;
+                    if (onCreateNewEvent) {
+                      onCreateNewEvent(selectedDate);
+                    }
+                  }}
+                  title="새 일정 만들기"
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSelectedDate(null);
+                    setBottomSheetEvents([]);
+                    bottomSheetOpenRef.current = false;
+                  }}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 overscroll-contain">
