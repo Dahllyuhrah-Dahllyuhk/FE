@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import type { Event } from '@/types/calendar';
 
 type EventDialogProps = {
@@ -44,27 +45,36 @@ export function EventDialog({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [color, setColor] = useState('bg-blue-500');
+  const [allDay, setAllDay] = useState(false);
 
   useEffect(() => {
     if (event) {
       setTitle(event.title);
       setDescription(event.description);
-      setStartDate(formatDateTimeLocal(event.startDate));
-      setEndDate(formatDateTimeLocal(event.endDate));
+      setAllDay(event.allDay || false);
+      setStartDate(formatDateTimeLocal(event.startDate, event.allDay || false));
+      setEndDate(formatDateTimeLocal(event.endDate, event.allDay || false));
       setColor(event.color);
     } else if (dateRange) {
       setTitle('');
       setDescription('');
-      setStartDate(formatDateTimeLocal(dateRange.start));
-      setEndDate(formatDateTimeLocal(dateRange.end));
+      setAllDay(false);
+      setStartDate(formatDateTimeLocal(dateRange.start, false));
+      setEndDate(formatDateTimeLocal(dateRange.end, false));
       setColor('bg-blue-500');
     }
   }, [event, dateRange]);
 
-  const formatDateTimeLocal = (date: Date) => {
+  const formatDateTimeLocal = (date: Date, isAllDay: boolean) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
+
+    if (isAllDay) {
+      // For all-day events, return date only
+      return `${year}-${month}-${day}`;
+    }
+
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
@@ -78,6 +88,7 @@ export function EventDialog({
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       color,
+      allDay,
     };
     onSave(newEvent);
     resetForm();
@@ -96,6 +107,7 @@ export function EventDialog({
     setStartDate('');
     setEndDate('');
     setColor('bg-blue-500');
+    setAllDay(false);
   };
 
   return (
@@ -124,24 +136,33 @@ export function EventDialog({
               rows={3}
             />
           </div>
+
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-border p-3 bg-card">
+            <Label htmlFor="allday" className="cursor-pointer font-medium">
+              종일
+            </Label>
+            <Switch id="allday" checked={allDay} onCheckedChange={setAllDay} />
+          </div>
+
           <div className="grid gap-2">
-            <Label htmlFor="start">시작 시간</Label>
+            <Label htmlFor="start">{allDay ? '시작 날짜' : '시작 시간'}</Label>
             <Input
               id="start"
-              type="datetime-local"
+              type={allDay ? 'date' : 'datetime-local'}
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="end">종료 시간</Label>
+            <Label htmlFor="end">{allDay ? '종료 날짜' : '종료 시간'}</Label>
             <Input
               id="end"
-              type="datetime-local"
+              type={allDay ? 'date' : 'datetime-local'}
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
+
           <div className="grid gap-2">
             <Label>색상</Label>
             <div className="flex gap-2">

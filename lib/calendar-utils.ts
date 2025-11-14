@@ -54,7 +54,7 @@ export function mapRawToCalendarEvent(raw: any, idx: number) {
       startDate: startLocal,
       endDate: endInclusiveLocal,
       allDay: true,
-      color: palette[idx % palette.length],
+      color: baseColor,
     };
   }
 
@@ -79,7 +79,7 @@ export function mapRawToCalendarEvent(raw: any, idx: number) {
     startDate: new Date(startMs),
     endDate: new Date(endMs),
     allDay: !!raw.allDay,
-    color: palette[idx % palette.length],
+    color: baseColor,
   };
 }
 
