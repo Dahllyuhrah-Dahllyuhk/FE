@@ -1,141 +1,107 @@
 // FE/lib/api.ts
 import type { RawCalendarEvent } from '@/types/calendar';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+// ✅ 다른 파일에서 import { API_BASE } 할 수 있도록 export 추가
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
 /**
- * 전체 기간 일정 조회
- * - 구글 연결 안 된 유저 → BE에서 [] 반환 (200 OK)
- * - 카카오 미로그인 → 401 → 예외
- * - 절대 여기에서 구글 로그인으로 리다이렉트하지 않는다
+ * 공통 fetch 래퍼
+ * - credentials: 'include' 로 쿠키(JWT) 항상 포함
+ * - 401이면 그대로 throw 해서 프론트에서 로그인 페이지로 보내도록 처리
  */
-export async function fetchAllCalendarEvents(): Promise<RawCalendarEvent[]> {
-  const url = `${API_BASE}/api/calendar/events`;
-  const res = await fetch(url, {
+async function apiFetch(input: string, init?: RequestInit) {
+  const res = await fetch(`${API_BASE}${input}`, {
     credentials: 'include',
-    headers: { Accept: 'application/json' },
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
   });
 
-  if (res.status === 401 || res.status === 403) {
-    throw new Error('인증이 필요합니다. 다시 로그인 해 주세요.');
+  if (res.status === 401) {
+    // 카카오 미로그인 등 → 프론트에서 처리
+    throw new Error('UNAUTHORIZED');
   }
 
   if (!res.ok) {
-    throw new Error(`이벤트 조회 실패: ${res.status}`);
+    const text = await res.text().catch(() => '');
+    console.error('API error', res.status, text);
+    throw new Error(`API_ERROR_${res.status}`);
   }
 
-  const ct = res.headers.get('content-type') || '';
+  return res;
+}
 
-  // 혹시 JSON 이 아니면 "일정 없음"으로 간주
-  if (!ct.includes('application/json')) {
-    return [];
-  }
+/**
+ * 전체 기간 일정 조회
+ * - BE: GET /api/calendar/all
+ * - 구글 연결 안 된 유저는 [] 반환
+ */
+export async function fetchAllCalendarEvents(): Promise<RawCalendarEvent[]> {
+  // 백엔드에서 실제로 구현되어 있는 GET 엔드포인트로 맞추기
+  // 예: GET /api/calendar/events
+  const res = await apiFetch('/api/calendar/events', {
+    method: 'GET',
+  });
+  return res.json();
+}
 
-  const json = await res.json();
-  return Array.isArray(json)
-    ? json
-    : Array.isArray(json?.events)
-    ? json.events
-    : [];
+/**
+ * 기존: 특정 기간만 조회하던 함수
+ * 지금은 혹시 다른 데서 쓰고 있을 수 있으니 남겨두되,
+ * 내부 구현은 all 조회 재사용 (필요하면 프론트에서 필터링)
+ */
+export async function fetchCalendarEvents(): Promise<RawCalendarEvent[]> {
+  return fetchAllCalendarEvents();
 }
 
 /**
  * 일정 생성
- * - 구글 계정이 연결되지 않은 상태라면 BE에서 401/403을 줄 수 있음
- * - 그 경우 FE는 에러를 던지고, 사용자는 "동기화" 버튼으로 구글 로그인 진행
  */
-export async function createCalendarEvent(req: {
-  title: string;
+export async function createCalendarEvent(body: {
+  title?: string;
   description?: string;
   start: string;
   end: string;
   allDay?: boolean;
-  timeZone?: string;
   color?: string;
-}): Promise<any> {
-  const url = `${API_BASE}/api/calendar/events`;
-  const res = await fetch(url, {
+}): Promise<RawCalendarEvent> {
+  const res = await apiFetch('/api/calendar/events', {
     method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(req),
+    body: JSON.stringify(body),
   });
-
-  if (res.status === 401 || res.status === 403) {
-    throw new Error(
-      '구글 캘린더가 연결되어 있지 않습니다. 먼저 동기화를 진행해 주세요.'
-    );
-  }
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to create event: ${res.status} - ${errorText}`);
-  }
-
   return res.json();
 }
 
+/**
+ * 일정 수정
+ */
 export async function updateCalendarEvent(
-  eventId: string,
-  req: {
-    title: string;
+  id: string,
+  body: {
+    title?: string;
     description?: string;
-    start: string;
-    end: string;
+    start?: string;
+    end?: string;
     allDay?: boolean;
-    timeZone?: string;
     color?: string;
   }
-): Promise<any> {
-  const url = `${API_BASE}/api/calendar/events/${eventId}`;
-  const res = await fetch(url, {
+): Promise<RawCalendarEvent> {
+  const res = await apiFetch(`/api/calendar/events/${id}`, {
     method: 'PUT',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(req),
+    body: JSON.stringify(body),
   });
-
-  if (res.status === 401 || res.status === 403) {
-    throw new Error(
-      '구글 캘린더가 연결되어 있지 않습니다. 먼저 동기화를 진행해 주세요.'
-    );
-  }
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to update event: ${res.status} - ${errorText}`);
-  }
-
   return res.json();
 }
 
-export async function deleteCalendarEvent(eventId: string): Promise<void> {
-  const url = `${API_BASE}/api/calendar/events/${eventId}`;
-  const res = await fetch(url, {
+/**
+ * 일정 삭제
+ */
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  await apiFetch(`/api/calendar/events/${id}`, {
     method: 'DELETE',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
   });
-
-  if (res.status === 401 || res.status === 403) {
-    throw new Error(
-      '구글 캘린더가 연결되어 있지 않습니다. 먼저 동기화를 진행해 주세요.'
-    );
-  }
-
-  // 구글 쪽에서 이미 삭제된 경우(410 Gone)는 성공으로 처리
-  if (res.status === 410) {
-    return;
-  }
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Failed to delete event: ${res.status} - ${errorText}`);
-  }
 }
