@@ -4,5 +4,9 @@ node_modules
 .gitignore
 npm-debug.log
 pnpm-lock.yaml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 yarn.lock
 .env

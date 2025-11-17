@@ -1,63 +1,106 @@
-"use client"
+'use client';
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { API_BASE } from '@/lib/api';
 
-export interface User {
-  id: string
-  nickname: string
-  profileImageUrl?: string
-}
+type User = {
+  id: string;
+  nickname: string;
+  profileImageUrl?: string | null;
+};
 
-interface AuthContextType {
-  user: User | null
-  isLoading: boolean
-  logout: () => void
-}
+type AuthContextType = {
+  user: User | null;
+  isLoading: boolean;
+  refreshUser: () => Promise<void>;
+  logout: () => void;
+};
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // 사용자 정보 확인
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080"
-        const res = await fetch(`${API_BASE}/api/auth/me`, {
-          credentials: "include",
-        })
+  const pathname = usePathname();
+  const router = useRouter();
 
-        if (res.ok) {
-          const userData = await res.json()
-          setUser(userData)
-        } else {
-          setUser(null)
-        }
-      } catch (error) {
-        console.error("[v0] Auth check error:", error)
-        setUser(null)
-      } finally {
-        setIsLoading(false)
+  const fetchMe = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        setUser(null);
+        return;
       }
+
+      const data = await res.json();
+      setUser({
+        id: data.id,
+        nickname: data.nickname,
+        profileImageUrl: data.profileImageUrl,
+      });
+    } catch (e) {
+      console.error('auth /api/auth/me error', e);
+      setUser(null);
     }
+  }, []);
 
-    checkAuth()
-  }, [])
+  const refreshUser = useCallback(async () => {
+    setIsLoading(true);
+    await fetchMe();
+    setIsLoading(false);
+  }, [fetchMe]);
 
-  const logout = () => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080"
-    window.location.href = `${API_BASE}/logout`
+  useEffect(() => {
+    (async () => {
+      await fetchMe();
+      setIsLoading(false);
+    })();
+  }, [fetchMe]);
+
+  const logout = useCallback(() => {
+    // 백엔드에서 쿠키 삭제 후 FRONTEND_ORIGIN으로 리다이렉트하도록 구현해둔 경우
+    window.location.href = `${API_BASE}/logout`;
+  }, []);
+
+  // 로그인 필요 페이지 보호 ("/login"은 예외)
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (!user && pathname !== '/login') {
+      router.replace('/login');
+    }
+  }, [isLoading, user, pathname, router]);
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        refreshUser,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider');
   }
-
-  return <AuthContext.Provider value={{ user, isLoading, logout }}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error("useAuth must be used within AuthProvider")
-  }
-  return context
-}
+  return ctx;
+};
