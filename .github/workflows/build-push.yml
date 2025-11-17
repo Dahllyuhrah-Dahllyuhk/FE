@@ -62,7 +62,7 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
             # 1. 'Deploy' 리포지토리가 clone된 폴더로 이동
-            cd /home/ubuntu/Deploy
+            cd /home/ubuntu/matuabom
 
             # 2. 혹시 docker-compose.yml이 변경되었을 수 있으니 git pull
             git pull
