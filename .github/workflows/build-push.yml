@@ -1,0 +1,77 @@
+name: Build, Push FE Image & Deploy
+
+on:
+  push:
+    branches: ['main']
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REPO: ${{ secrets.ECR_FE_REPO }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image name
+        id: vars
+        run: |
+          echo "IMAGE_NAME=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}" >> $GITHUB_ENV
+
+      - name: Build FE image
+        run: |
+          docker build \
+            -t $IMAGE_NAME:latest \
+            -t $IMAGE_NAME:${{ github.sha }} \
+            --build-arg NEXT_PUBLIC_API_BASE=https://matuabom.store \
+            .
+
+      - name: Push FE image
+        run: |
+          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            # 1. 'Deploy' 리포지토리가 clone된 폴더로 이동
+            cd /home/ubuntu/Deploy
+
+            # 2. 혹시 docker-compose.yml이 변경되었을 수 있으니 git pull
+            git pull
+
+            # 3. 방금 빌드된 새 FE 이미지를 PULL
+            docker-compose pull fe
+
+            # 4. FE 서비스만 재시작
+            docker-compose up -d --no-deps fe
+
+            # 5. 사용하지 않는 (dangling) 이미지 정리
+            docker image prune -f

@@ -8,13 +8,13 @@ COPY package*.json pnpm-lock.yaml* yarn.lock* ./
 
 # 의존성 설치 (하나만 실행되도록 분기)
 RUN if [ -f package-lock.json ]; then \
-        npm ci; \
+      npm ci; \
     elif [ -f yarn.lock ]; then \
-        yarn install --frozen-lockfile; \
+      yarn install --frozen-lockfile; \
     elif [ -f pnpm-lock.yaml ]; then \
-        corepack enable && pnpm install --frozen-lockfile; \
+      corepack enable && pnpm install --frozen-lockfile; \
     else \
-        npm install; \
+      npm install; \
     fi
 
 # 나머지 소스 복사
