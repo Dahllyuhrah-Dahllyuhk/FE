@@ -35,9 +35,6 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [colorMap, setColorMap] = useState<Map<string, string>>(new Map());
 
-  // 📌 [제거] 낙관적 UI에서는 'isSubmitting' state가 필요 없습니다.
-  // const [isSubmitting, setIsSubmitting] = useState(false);
-
   const isMobile = useIsMobile();
 
   // 🔥 전역 refresh 트리거
@@ -148,133 +145,101 @@ export default function HomePage() {
   };
 
   // =============================
-  // 저장 / 삭제 (📌 [수정] 낙관적 UI 로직으로 전체 교체)
+  // 저장 / 삭제
   // =============================
 
   const handleSaveEvent = async (event: Event) => {
-    // 1. (즉각 반응) 대화상자를 즉시 닫음
     setIsDialogOpen(false);
+    setSelectedEvent(null);
+    setSelectedDateRange(null);
     setIsEditMode(false);
 
-    // 2. (즉각 반응) API 요청에 필요한 payload 미리 준비
-    const formatToISO = (
-      date: Date,
-      allDay: boolean,
-      isEndDate: boolean
-    ): string => {
-      if (allDay) {
-        const dateToUse = isEndDate
-          ? new Date(date.getTime() + 24 * 60 * 60 * 1000)
-          : date;
-        const year = dateToUse.getFullYear();
-        const month = String(dateToUse.getMonth() + 1).padStart(2, '0');
-        const day = String(dateToUse.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      }
-      return date.toISOString();
-    };
-
-    const isAllDay = Boolean(event.allDay);
-
-    const requestPayload = {
-      title: event.title || '무제',
-      description: event.description || '',
-      start: formatToISO(event.startDate, isAllDay, false),
-      end: formatToISO(event.endDate, isAllDay, isAllDay),
-      allDay: isAllDay,
-      timeZone: 'Asia/Seoul',
-      color: event.color,
-    };
-
-    // 3. (즉각 반응) 임시 ID 및 가짜 이벤트 생성
-    // (selectedEvent가 있으면 '수정', 없으면 '생성')
-    const tempId = selectedEvent ? selectedEvent.id : `temp-${Date.now()}`;
-    const optimisticEvent: Event = { ...event, id: tempId };
-
-    // 4. (즉각 반응) UI에 낙관적 결과 선반영
-    setError(null);
-    if (selectedEvent) {
-      // (수정)
-      setEvents((prev) =>
-        prev.map((e) => (e.id === tempId ? optimisticEvent : e))
-      );
-    } else {
-      // (생성)
-      setEvents((prev) => [...prev, optimisticEvent]);
-    }
-
-    // 5. (백그라운드) API 호출 시작
     try {
+      setError(null);
+
+      const formatToISO = (
+        date: Date,
+        allDay: boolean,
+        isEndDate: boolean
+      ): string => {
+        if (allDay) {
+          const dateToUse = isEndDate
+            ? new Date(date.getTime() + 24 * 60 * 60 * 1000)
+            : date;
+          const year = dateToUse.getFullYear();
+          const month = String(dateToUse.getMonth() + 1).padStart(2, '0');
+          const day = String(dateToUse.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+        return date.toISOString();
+      };
+
+      const isAllDay = Boolean(event.allDay);
+
+      const requestPayload = {
+        title: event.title || '무제',
+        description: event.description || '',
+        start: formatToISO(event.startDate, isAllDay, false),
+        end: formatToISO(event.endDate, isAllDay, isAllDay),
+        allDay: isAllDay,
+        timeZone: 'Asia/Seoul',
+        color: event.color,
+      };
+
       if (selectedEvent) {
-        // (수정)
-        const realEvent = await updateCalendarEvent(tempId, requestPayload);
-        // (성공) UI의 이벤트를 '진짜' 이벤트로 교체 (mapRaw 사용)
-        setEvents((prev) =>
-          prev.map((e) => (e.id === tempId ? mapRaw([realEvent])[0] : e))
-        );
-        // 색상 맵 업데이트
-        setColorMap((prev) =>
-          new Map(prev).set(realEvent.id, realEvent.color || '')
-        );
+        // 수정
+        await updateCalendarEvent(selectedEvent.id, requestPayload);
+
+        // 색상 override
+        setColorMap((prev) => {
+          const next = new Map(prev);
+          next.set(selectedEvent.id, event.color);
+          return next;
+        });
       } else {
-        // (생성)
-        const realEvent = await createCalendarEvent(requestPayload);
-        // (성공) UI의 '임시' 이벤트를 '진짜' 이벤트(Google ID)로 교체
-        setEvents((prev) =>
-          prev.map((e) => (e.id === tempId ? mapRaw([realEvent])[0] : e))
-        );
-        // 색상 맵 업데이트
-        setColorMap((prev) =>
-          new Map(prev).set(realEvent.id, realEvent.color || '')
-        );
+        // 생성
+        const created = await createCalendarEvent(requestPayload);
+        if (created?.id) {
+          setColorMap((prev) => {
+            const next = new Map(prev);
+            next.set(created.id, event.color);
+            return next;
+          });
+        }
       }
     } catch (err: any) {
-      // 6. (실패) API 실패 시
       setError(err?.message ?? '일정 저장 중 오류가 발생했습니다');
-      // (실패) UI에 반영했던 '낙관적' 결과 되돌리기
-      if (selectedEvent) {
-        // (수정 실패) -> 간단하게 전체 목록을 다시 불러와 복구
-        refresh();
-      } else {
-        // (생성 실패) -> UI에서 임시 이벤트 제거
-        setEvents((prev) => prev.filter((e) => e.id !== tempId));
-      }
     } finally {
-      // (정리)
-      setSelectedEvent(null);
-      setSelectedDateRange(null);
+      // ✅ 실제 목록은 항상 서버 기준으로 다시 로딩
+      refresh();
     }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    // 1. (즉각 반응) 삭제할 이벤트를 UI에서 미리 제거
-    const eventToDelete = events.find((e) => e.id === eventId);
-    if (!eventToDelete) return; // 이미 없으면 무시
-
-    setEvents((prev) => prev.filter((e) => e.id !== eventId));
-
-    // (즉각 반응) 모달 닫기
     setIsDetailModalOpen(false);
     setIsDialogOpen(false);
     setSelectedEvent(null);
-    setError(null);
 
-    // 2. (백그라운드) API 호출
     try {
+      setError(null);
       await deleteCalendarEvent(eventId);
-      // (성공) -> UI는 이미 반영됨. 색상 캐시만 제거.
+
+      // 색상 캐시 제거
       setColorMap((prev) => {
         const next = new Map(prev);
         next.delete(eventId);
         return next;
       });
     } catch (err: any) {
-      // 3. (실패) API 실패 시
-      setError(err?.message ?? '삭제 중 오류가 발생했습니다');
-      // (실패) UI 되돌리기: 삭제했던 이벤트를 다시 추가
-      setEvents((prev) => [...prev, eventToDelete]);
+      if ((err as any)?.message?.includes('410')) {
+        setError('이미 삭제된 일정입니다. 동기화를 진행합니다.');
+      } else {
+        setError(err?.message ?? '일정 삭제 중 오류가 발생했습니다');
+      }
+    } finally {
+      // ✅ 삭제 후에도 서버 기준으로 다시 로딩
+      refresh();
     }
-    // 🚨 삭제 후 refresh()는 더 이상 필요 없음
   };
 
   // =============================
@@ -336,8 +301,6 @@ export default function HomePage() {
           event={selectedEvent}
           onDelete={handleDeleteEvent}
           onEdit={handleEditEvent}
-          // 📌 [제거] isSubmitting prop 제거
-          // isSubmitting={isSubmitting}
         />
 
         <EventDialog
@@ -347,8 +310,6 @@ export default function HomePage() {
           dateRange={isEditMode ? selectedDateRange : null}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
-          // 📌 [제거] isSubmitting prop 제거
-          // isSubmitting={isSubmitting}
         />
 
         <BottomNav />
