@@ -105,3 +105,75 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+// 친구 DTO (백엔드 FriendDto에 맞게 사용)
+export type FriendDto = {
+  id: string;
+  nickname: string;
+  profileImageUrl?: string | null;
+};
+
+// 초대코드 응답 타입
+export type InviteCodeResponse = {
+  ownerUserId: string;
+  code: string;
+};
+
+/**
+ * 내 초대코드 조회
+ * GET /api/friends/invite-code
+ */
+export async function fetchMyInviteCode(): Promise<InviteCodeResponse> {
+  const res = await apiFetch('/api/friends/invite-code', {
+    method: 'GET',
+  });
+  return res.json();
+}
+
+/**
+ * 내 친구 목록 조회
+ * GET /api/friends
+ */
+export async function fetchFriends(): Promise<FriendDto[]> {
+  const res = await apiFetch('/api/friends', {
+    method: 'GET',
+  });
+  return res.json();
+}
+
+/**
+ * 초대코드로 친구 추가
+ * POST /api/friends/addFriend
+ * body: { code: string }
+ */
+export async function addFriendByCode(code: string): Promise<FriendDto> {
+  const res = await fetch(`${API_BASE}/api/friends/addFriend`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ code }),
+  });
+
+  if (res.ok) {
+    return res.json(); // FriendDto
+  }
+
+  // 에러 메시지는 plain text로 옴 → 그대로 읽기
+  const message = await res.text();
+
+  // status별로 throw
+  if (res.status === 400) {
+    throw new Error(message || '잘못된 요청입니다.');
+  }
+  if (res.status === 404) {
+    throw new Error('친구를 찾을 수 없습니다.');
+  }
+  if (res.status === 409) {
+    throw new Error('이미 친구입니다.');
+  }
+
+  throw new Error(message || '친구 추가 중 알 수 없는 오류가 발생했습니다.');
+}
+
