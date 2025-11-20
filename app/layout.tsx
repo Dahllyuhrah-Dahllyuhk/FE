@@ -6,6 +6,7 @@ import { Analytics } from '@vercel/analytics/next';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/context/auth-context';
 import { EventRefreshProvider } from '@/hooks/useEventRefresh';
+import { Toaster } from '@/components/ui/toaster';
 import './globals.css';
 
 const _geist = Geist({ subsets: ['latin'] });
@@ -30,6 +31,7 @@ export default function RootLayout({
           <AuthProvider>
             <EventRefreshProvider>
               {children}
+              <Toaster /> 
               {/* <Analytics /> 필요하면 다시 켜기 */}
             </EventRefreshProvider>
           </AuthProvider>
