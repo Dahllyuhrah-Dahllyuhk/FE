@@ -1,0 +1,79 @@
+name: Build, Push FE Image & Deploy
+
+on:
+  push:
+    branches: ['develop']
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  ECR_REPO: ${{ secrets.ECR_FE_REPO }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image name
+        id: vars
+        run: |
+          echo "IMAGE_NAME=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}" >> $GITHUB_ENV
+
+      - name: Build FE image
+        run: |
+          docker build \
+            -t $IMAGE_NAME:latest \
+            -t $IMAGE_NAME:${{ github.sha }} \
+            --build-arg NEXT_PUBLIC_API_BASE=https://matuabom.store \
+            .
+
+      - name: Push FE image
+        run: |
+          docker push $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            # 0. ECR 로그인 (Github Secrets 활용하여 보안 강화)
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+            cd /home/ubuntu/matuabom
+
+            # 1. git pull 제거 (필요 없음)
+            # git pull
+
+            # 2. 최신 FE 이미지 다운로드 (docker compose v2 사용)
+            docker compose pull fe
+
+            # 3. FE 서비스 강제 재생성 및 재시작
+            docker compose up -d --no-deps --force-recreate fe
+
+            # 4. 이미지 정리
+            docker image prune -f
