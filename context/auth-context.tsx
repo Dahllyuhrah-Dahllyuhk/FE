@@ -69,9 +69,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     })();
   }, [fetchMe]);
 
-  const logout = useCallback(() => {
-    // 백엔드에서 쿠키 삭제 후 FRONTEND_ORIGIN으로 리다이렉트하도록 구현해둔 경우
-    window.location.href = `${API_BASE}/logout`;
+  // ✅ 수정된 로그아웃 함수
+  const logout = useCallback(async () => {
+    try {
+      // 백엔드에 쿠키 삭제 요청 (POST /api/auth/logout)
+      await fetch(`${API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Logout API call failed', e);
+    } finally {
+      // 프론트엔드 상태 비우기
+      setUser(null);
+      // 로그인 페이지로 이동 (새로고침 효과를 위해 window.location 사용)
+      window.location.href = '/login';
+    }
   }, []);
 
   // 로그인 필요 페이지 보호 ("/login"은 예외)
