@@ -177,3 +177,9 @@ export async function addFriendByCode(code: string): Promise<FriendDto> {
   throw new Error(message || '친구 추가 중 알 수 없는 오류가 발생했습니다.');
 }
 
+export async function deleteFriend(friendId: string): Promise<void> {
+  await apiFetch(`/api/friends/${friendId}`, {
+    method: 'DELETE',
+  });
+}
+

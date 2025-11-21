@@ -13,6 +13,7 @@ import {
   addFriendByCode,
   fetchFriends,
   fetchMyInviteCode,
+  deleteFriend,
   type FriendDto,
 } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
@@ -26,6 +27,7 @@ export default function FriendsPage() {
 
   const [friendCodeInput, setFriendCodeInput] = useState('');
   const [addingFriend, setAddingFriend] = useState(false);
+  const [deletingFriendId, setDeletingFriendId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
@@ -134,6 +136,43 @@ export default function FriendsPage() {
       setAddingFriend(false);
     }
   };
+
+    const handleDeleteFriend = async (friend: FriendDto) => {
+    const nickname = friend.nickname ?? '친구';
+
+    // 간단 확인창
+    if (!window.confirm(`${nickname}을(를) 친구 목록에서 삭제할까요?`)) {
+      return;
+    }
+
+    try {
+      setDeletingFriendId(friend.id);
+      await deleteFriend(friend.id);
+
+      // 프론트 목록에서도 제거
+      setFriends((prev) => prev.filter((f) => f.id !== friend.id));
+
+      toast({
+        title: '친구 삭제 완료',
+        description: `${nickname}가 친구 목록에서 삭제되었어요.`,
+      });
+    } catch (err) {
+      console.error(err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : '친구 삭제 중 오류가 발생했습니다.';
+
+      toast({
+        title: '친구 삭제 실패',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingFriendId(null);
+    }
+  };
+
 
   return (
     <ProtectedRoute>
@@ -276,12 +315,15 @@ export default function FriendsPage() {
                           </div>
                         </div>
 
-                        <div className="ml-2 flex gap-2">
-                          <Button size="icon" variant="ghost" type="button">
-                            <MessageCircle className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="ghost" type="button">
-                            <MoreVertical className="h-4 w-4" />
+                      <div className="ml-2 flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            type="button"
+                            disabled={deletingFriendId === friend.id}
+                            onClick={() => handleDeleteFriend(friend)}
+                          >
+                            {deletingFriendId === friend.id ? '삭제 중...' : '삭제'}
                           </Button>
                         </div>
                       </div>
