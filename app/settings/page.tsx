@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useTheme } from 'next-themes';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { BottomNav } from '@/components/bottom-nav';
@@ -23,27 +22,9 @@ import {
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const router = useRouter();
-  const { logout } = useAuth();
+  const { logout } = useAuth(); // ✅ context의 logout 사용
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(false);
-
-  const handleLogout = async () => {
-    try {
-      const API_BASE =
-        process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
-      await fetch(`${API_BASE}/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      logout();
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      logout();
-      router.push('/login');
-    }
-  };
 
   return (
     <ProtectedRoute>
@@ -177,7 +158,7 @@ export default function SettingsPage() {
             <Button
               variant="destructive"
               className="w-full gap-2"
-              onClick={handleLogout}
+              onClick={logout} // ✅ 수정됨: 직접 logout 함수 호출
             >
               <LogOut className="h-4 w-4" />
               로그아웃

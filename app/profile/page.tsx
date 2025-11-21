@@ -24,24 +24,7 @@ import { useAuth } from '@/context/auth-context';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { logout } = useAuth();
-
-  const handleLogout = async () => {
-    try {
-      const API_BASE =
-        process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
-      await fetch(`${API_BASE}/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      logout();
-      router.push('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      logout();
-      router.push('/login');
-    }
-  };
+  const { user, logout } = useAuth(); // ✅ user 정보도 context에서 가져오면 좋습니다 (아래 렌더링에 활용 가능)
 
   return (
     <ProtectedRoute>
@@ -57,18 +40,24 @@ export default function ProfilePage() {
               <div className="relative px-6 pb-6">
                 <div className="flex flex-col items-center">
                   <Avatar className="-mt-12 h-24 w-24 border-4 border-card">
-                    <AvatarImage src="/placeholder.svg?height=96&width=96" />
+                    {/* 실제 유저 프로필 이미지가 있으면 사용 */}
+                    <AvatarImage
+                      src={
+                        user?.profileImageUrl ||
+                        '/placeholder.svg?height=96&width=96'
+                      }
+                    />
                     <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-2xl text-white">
-                      김
+                      {user?.nickname?.[0] || '김'}
                     </AvatarFallback>
                   </Avatar>
                   <h2 className="mt-4 text-2xl font-bold text-foreground">
-                    김철수
+                    {user?.nickname || '사용자'}
                   </h2>
-                  <p className="text-muted-foreground">프로젝트 매니저</p>
+                  <p className="text-muted-foreground">일반 회원</p>
                   <Badge variant="secondary" className="mt-2">
                     <Award className="mr-1 h-3 w-3" />
-                    프리미엄 회원
+                    인증 회원
                   </Badge>
                   <Button className="mt-4 bg-transparent" variant="outline">
                     <Edit className="mr-2 h-4 w-4" />
@@ -121,7 +110,7 @@ export default function ProfilePage() {
                   <div className="flex-1">
                     <p className="text-xs text-muted-foreground">이메일</p>
                     <p className="font-medium text-foreground">
-                      kim.chulsoo@example.com
+                      user@example.com
                     </p>
                   </div>
                 </div>
@@ -131,7 +120,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-xs text-muted-foreground">전화번호</p>
-                    <p className="font-medium text-foreground">010-1234-5678</p>
+                    <p className="font-medium text-foreground">010-xxxx-xxxx</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
@@ -170,7 +159,7 @@ export default function ProfilePage() {
                 설정
               </Button>
               <Button
-                onClick={handleLogout}
+                onClick={logout} // ✅ 수정됨: 직접 logout 함수 호출
                 variant="destructive"
                 className="w-full"
               >
