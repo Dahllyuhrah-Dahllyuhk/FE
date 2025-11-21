@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Home, Calendar, MessageSquare, Users, User } from 'lucide-react';
-import { useAuth } from '@/context/auth-context'; // add useAuth hook
+import { useAuth } from '@/context/auth-context';
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -29,7 +29,7 @@ export function BottomNav() {
       logout();
       router.push('/login');
     } catch (error) {
-      console.error('[v0] Logout failed:', error);
+      console.error('Logout failed:', error);
       logout();
       router.push('/login');
     }
@@ -56,15 +56,6 @@ export function BottomNav() {
             </Link>
           );
         })}
-        {/* Removed Settings and LogOut; Added Friends tab */}
-        {/* <button
-          onClick={handleLogout}
-          className="flex flex-1 flex-col items-center gap-1 py-3 transition-colors text-muted-foreground hover:text-foreground"
-          title="로그아웃"
-        >
-          <Users className="h-5 w-5" />
-          <span className="text-xs font-medium">로그아웃</span>
-        </button> */}
       </div>
     </nav>
   );

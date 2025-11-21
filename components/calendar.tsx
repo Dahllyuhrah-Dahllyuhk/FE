@@ -199,7 +199,7 @@ export function Calendar({
       }
 
       if (toAdd.length > 0) {
-        console.log('[v0] Adding previous months:', toAdd.length);
+        console.log('Adding previous months:', toAdd.length);
         const previousScrollHeight = container.scrollHeight;
 
         setDisplayMonths((prev) => [...toAdd, ...prev]);
@@ -210,7 +210,7 @@ export function Calendar({
             const newScrollHeight = container.scrollHeight;
             const heightDiff = newScrollHeight - previousScrollHeight;
             container.scrollTop = scrollTop + heightDiff;
-            console.log('[v0] Adjusted scroll position by:', heightDiff);
+            console.log('Adjusted scroll position by:', heightDiff);
             isUpdatingScrollRef.current = false;
           });
         });
@@ -229,7 +229,7 @@ export function Calendar({
           toAdd.push(m);
       }
       if (toAdd.length > 0) {
-        console.log('[v0] Adding next months:', toAdd.length);
+        console.log('Adding next months:', toAdd.length);
         setDisplayMonths((prev) => [...prev, ...toAdd]);
       }
     }

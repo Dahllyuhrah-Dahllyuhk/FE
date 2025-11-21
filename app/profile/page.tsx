@@ -37,7 +37,7 @@ export default function ProfilePage() {
       logout();
       router.push('/login');
     } catch (error) {
-      console.error('[v0] Logout failed:', error);
+      console.error('Logout failed:', error);
       logout();
       router.push('/login');
     }
