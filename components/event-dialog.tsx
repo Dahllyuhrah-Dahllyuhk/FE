@@ -112,7 +112,7 @@ export function EventDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] max-h-[75vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{event ? '일정 편집' : '새 일정'}</DialogTitle>
         </DialogHeader>

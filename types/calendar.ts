@@ -1,4 +1,3 @@
-// FE/types/calendar.ts
 export type RawCalendarEvent = {
   id: string;
   userEmail: string;
@@ -23,6 +22,16 @@ export type Event = {
   description: string;
   startDate: Date;
   endDate: Date;
+  color: string;
+  allDay?: boolean;
+};
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  description: string;
+  start: Date;
+  end: Date;
   color: string;
   allDay?: boolean;
 };

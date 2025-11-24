@@ -1,15 +1,33 @@
 // FE/lib/api.ts
 import type { RawCalendarEvent } from '@/types/calendar';
+import type {
+  Meeting,
+  MeetingCreateRequest,
+  MeetingUpdateRequest,
+  ParticipantSettingsUpdateRequest,
+  AvailableSlot,
+  ParticipantTimeStatus,
+  DailyCountDto,
+} from '@/types/meeting';
 
-// ✅ 다른 파일에서 import { API_BASE } 할 수 있도록 export 추가
+// ✨ FriendDto 정의 (API 파일 내부에 위치)
+export type FriendDto = {
+  id: string;
+  nickname: string;
+  profileImageUrl?: string | null;
+};
+
+// ✨ 수정: 슬롯 번호 기반의 새로운 요청 페이로드 타입
+export type AvailabilitySlotUpdatePayload = {
+  date: string; // "YYYY-MM-DD"
+  slots: number[]; // 슬롯 번호 배열 (예: [18, 19, 20])
+  status: 'POSSIBLE' | 'IMPOSSIBLE';
+};
+
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
-/**
- * 공통 fetch 래퍼
- * - credentials: 'include' 로 쿠키(JWT) 항상 포함
- * - 401이면 그대로 throw 해서 프론트에서 로그인 페이지로 보내도록 처리
- */
+// ... (fetchAllCalendarEvents, createCalendarEvent 등 기존 함수 생략) ...
 async function apiFetch(input: string, init?: RequestInit) {
   const res = await fetch(`${API_BASE}${input}`, {
     credentials: 'include',
@@ -22,7 +40,6 @@ async function apiFetch(input: string, init?: RequestInit) {
   });
 
   if (res.status === 401) {
-    // 카카오 미로그인 등 → 프론트에서 처리
     throw new Error('UNAUTHORIZED');
   }
 
@@ -37,23 +54,15 @@ async function apiFetch(input: string, init?: RequestInit) {
 
 /**
  * 전체 기간 일정 조회
- * - BE: GET /api/calendar/all
- * - 구글 연결 안 된 유저는 [] 반환
+ * - BE: GET /api/calendar/events
  */
 export async function fetchAllCalendarEvents(): Promise<RawCalendarEvent[]> {
-  // 백엔드에서 실제로 구현되어 있는 GET 엔드포인트로 맞추기
-  // 예: GET /api/calendar/events
   const res = await apiFetch('/api/calendar/events', {
     method: 'GET',
   });
   return res.json();
 }
 
-/**
- * 기존: 특정 기간만 조회하던 함수
- * 지금은 혹시 다른 데서 쓰고 있을 수 있으니 남겨두되,
- * 내부 구현은 all 조회 재사용 (필요하면 프론트에서 필터링)
- */
 export async function fetchCalendarEvents(): Promise<RawCalendarEvent[]> {
   return fetchAllCalendarEvents();
 }
@@ -106,13 +115,6 @@ export async function deleteCalendarEvent(id: string): Promise<void> {
   });
 }
 
-// 친구 DTO (백엔드 FriendDto에 맞게 사용)
-export type FriendDto = {
-  id: string;
-  nickname: string;
-  profileImageUrl?: string | null;
-};
-
 // 초대코드 응답 타입
 export type InviteCodeResponse = {
   ownerUserId: string;
@@ -144,7 +146,6 @@ export async function fetchFriends(): Promise<FriendDto[]> {
 /**
  * 초대코드로 친구 추가
  * POST /api/friends/addFriend
- * body: { code: string }
  */
 export async function addFriendByCode(code: string): Promise<FriendDto> {
   const res = await fetch(`${API_BASE}/api/friends/addFriend`, {
@@ -160,10 +161,8 @@ export async function addFriendByCode(code: string): Promise<FriendDto> {
     return res.json(); // FriendDto
   }
 
-  // 에러 메시지는 plain text로 옴 → 그대로 읽기
   const message = await res.text();
 
-  // status별로 throw
   if (res.status === 400) {
     throw new Error(message || '잘못된 요청입니다.');
   }
@@ -183,3 +182,169 @@ export async function deleteFriend(friendId: string): Promise<void> {
   });
 }
 
+/* ===== Meeting APIs ===== */
+
+/**
+ * 모임 생성
+ * POST /api/meetings
+ */
+export async function createMeeting(
+  body: MeetingCreateRequest
+): Promise<Meeting> {
+  const res = await apiFetch('/api/meetings', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+/**
+ * 모임 목록 조회
+ * GET /api/meetings
+ */
+export async function fetchMeetings(): Promise<Meeting[]> {
+  const res = await apiFetch('/api/meetings', {
+    method: 'GET',
+  });
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+/**
+ * 모임 상세 조회
+ * GET /api/meetings/{id}
+ */
+export async function fetchMeeting(id: string): Promise<Meeting> {
+  const res = await apiFetch(`/api/meetings/${id}`, {
+    method: 'GET',
+  });
+  return res.json();
+}
+
+/**
+ * 최종 가용 시간 조회
+ * GET /api/meetings/{id}/available-slots
+ */
+export async function fetchAvailableSlots(
+  id: string
+): Promise<AvailableSlot[]> {
+  const res = await apiFetch(`/api/meetings/${id}/available-slots`, {
+    method: 'GET',
+  });
+  return res.json();
+}
+
+/**
+ * 날짜별 가용 인원 집계 조회 (월별 캘린더 하이라이트 용)
+ * GET /api/meetings/{id}/daily-availability
+ */
+export async function fetchDailyAvailability(
+  id: string
+): Promise<Record<string, DailyCountDto>> {
+  const res = await apiFetch(`/api/meetings/${id}/daily-availability`, {
+    method: 'GET',
+  });
+  return res.json();
+}
+
+/**
+ * 참여자 응답 업데이트
+ * PUT /api/meetings/{id}/status
+ */
+export async function updateParticipantStatus(
+  id: string,
+  statusList: ParticipantTimeStatus[]
+): Promise<Meeting> {
+  const res = await apiFetch(`/api/meetings/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify(statusList),
+  });
+  return res.json();
+}
+
+/**
+ * ✨ 수정: 슬롯 번호 기반의 PATCH API 호출
+ * PATCH /api/meetings/{meetingId}/status
+ */
+export async function patchParticipantAvailability(
+  meetingId: string,
+  updates: AvailabilitySlotUpdatePayload[] // ✨ 타입 변경
+): Promise<Meeting> {
+  // 백엔드 엔드포인트: PATCH /api/meetings/{meetingId}/status
+  const res = await apiFetch(`/api/meetings/${meetingId}/status`, {
+    method: 'PATCH',
+    // 백엔드는 Instant 범위를 기대하므로, 이 요청을 슬롯 기반으로 변경해야 합니다.
+    // 하지만 현재 백엔드는 슬롯을 기대하도록 수정했으므로, JSON.stringify(updates) 그대로 전송합니다.
+    body: JSON.stringify(updates),
+  });
+  return res.json();
+}
+
+/**
+ * 모임 수정 (Host only)
+ * PUT /api/meetings/{id}
+ */
+export async function updateMeeting(
+  id: string,
+  body: MeetingUpdateRequest
+): Promise<Meeting> {
+  const res = await apiFetch(`/api/meetings/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+/**
+ * 모임 삭제 (Host only)
+ * DELETE /api/meetings/{id}
+ */
+export async function deleteMeeting(id: string): Promise<void> {
+  await apiFetch(`/api/meetings/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * 참여자 설정 수정 (timetable/calendar 반영 여부)
+ * PUT /api/meetings/{meetingId}/settings
+ */
+export async function updateParticipantSettings(
+  meetingId: string,
+  body: ParticipantSettingsUpdateRequest
+): Promise<Meeting> {
+  const res = await apiFetch(`/api/meetings/${meetingId}/settings`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+/**
+ * 모임 초대 수락
+ * POST /api/meetings/{meetingId}/accept
+ */
+export async function acceptMeetingInvitation(
+  meetingId: string
+): Promise<Meeting> {
+  const res = await apiFetch(`/api/meetings/${meetingId}/accept`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  return res.json();
+}
+
+/**
+ * 모임에 사용자 초대
+ * POST /api/meetings/{meetingId}/invite
+ */
+export async function inviteUserToMeeting(
+  meetingId: string,
+  email: string
+): Promise<Meeting> {
+  const res = await apiFetch(`/api/meetings/${meetingId}/invite`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+  return res.json();
+}

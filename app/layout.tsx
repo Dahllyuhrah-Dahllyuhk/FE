@@ -16,7 +16,6 @@ export const metadata: Metadata = {
   title: '맞춰봄 캘린더',
   description: '맞춰봄 캘린더',
   generator: 'v0.app',
-  // ... (기존 메타데이터 그대로 두면 됨)
 };
 
 export default function RootLayout({
@@ -31,7 +30,7 @@ export default function RootLayout({
           <AuthProvider>
             <EventRefreshProvider>
               {children}
-              <Toaster /> 
+              <Toaster />
               {/* <Analytics /> 필요하면 다시 켜기 */}
             </EventRefreshProvider>
           </AuthProvider>

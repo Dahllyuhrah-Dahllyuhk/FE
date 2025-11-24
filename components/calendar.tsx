@@ -133,6 +133,9 @@ export function Calendar({
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState<Date | null>(null);
   const [dragEnd, setDragEnd] = useState<Date | null>(null);
+  const [touchStartTarget, setTouchStartTarget] = useState<EventTarget | null>(
+    null
+  );
 
   // 성능 파라미터
   const INITIAL_BEFORE = 2; // 현재 달 기준 앞쪽 렌더 개월
@@ -243,6 +246,7 @@ export function Calendar({
       setIsDragging(false);
       setDragStart(null);
       setDragEnd(null);
+      setTouchStartTarget(null);
     };
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
@@ -283,6 +287,7 @@ export function Calendar({
     setIsDragging(false);
     setDragStart(null);
     setDragEnd(null);
+    setTouchStartTarget(null);
   };
 
   /* 6) 월 렌더 */
@@ -474,6 +479,8 @@ export function Calendar({
                           onPointerDown={(
                             e: React.PointerEvent<HTMLDivElement>
                           ) => {
+                            setTouchStartTarget(e.target);
+
                             if (
                               (e.target as HTMLElement).closest(
                                 '[data-event-clickable]'
@@ -482,11 +489,6 @@ export function Calendar({
                               return;
                             }
                             if (isMobile && allDayEventsForDate.length > 0) {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setSelectedDate(cellDate);
-                              setBottomSheetEvents(allDayEventsForDate);
-                              bottomSheetOpenRef.current = true;
                               return;
                             }
                             const el = e.currentTarget as HTMLElement;
@@ -499,6 +501,21 @@ export function Calendar({
                           onPointerUp={(
                             e: React.PointerEvent<HTMLDivElement>
                           ) => {
+                            if (isMobile && allDayEventsForDate.length > 0) {
+                              if (
+                                touchStartTarget === e.target &&
+                                !isDragging
+                              ) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSelectedDate(cellDate);
+                                setBottomSheetEvents(allDayEventsForDate);
+                                bottomSheetOpenRef.current = true;
+                              }
+                              setTouchStartTarget(null);
+                              return;
+                            }
+
                             if (bottomSheetOpenRef.current) return;
                             const el = e.currentTarget as HTMLElement;
                             endDrag(el, e.pointerId);

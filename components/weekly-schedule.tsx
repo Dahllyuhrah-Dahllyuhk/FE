@@ -498,7 +498,7 @@ export function WeeklySchedule() {
               {HOUR_BLOCKS.map((block) => (
                 <div
                   key={block.start}
-                  className="border-r border-b border-border bg-muted/20 p-0.5 sm:p-1 h-12 sm:h-14 flex items-center justify-center last:border-b"
+                  className="border-r border-b border-border bg-muted/20 p-0.5 sm:p-1 h-10 sm:h-12 flex items-center justify-center last:border-b"
                 >
                   <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">
                     {block.label}
@@ -512,7 +512,7 @@ export function WeeklySchedule() {
                 {HOUR_BLOCKS.map((block) => (
                   <div
                     key={block.start}
-                    className="h-12 sm:h-14 border-b border-border bg-card hover:bg-accent/20 cursor-pointer transition-colors last:border-b"
+                    className="h-10 sm:h-12 border-b border-border bg-card hover:bg-accent/20 cursor-pointer transition-colors last:border-b"
                     onClick={() =>
                       openAddDialog(
                         dayIdx,
@@ -566,7 +566,7 @@ export function WeeklySchedule() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[70vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingSlot?.id ? '일정 수정' : '일정 추가'}
