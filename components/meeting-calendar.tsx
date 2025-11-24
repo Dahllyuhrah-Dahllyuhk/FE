@@ -1,25 +1,35 @@
 'use client';
 
-import * as React from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, addMonths, subMonths, isSameDay, isToday } from 'date-fns';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  addDays,
+  isSameDay,
+  isToday,
+  addMonths,
+  subMonths,
+} from 'date-fns';
 import { ko } from 'date-fns/locale';
-
-import { cn } from '@/lib/utils';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { buildMonthGrid } from '@/lib/calendar-utils';
+import { cn } from '@/lib/utils';
+import {
+  fetchDailyAvailability,
+  patchParticipantAvailability,
+  type AvailabilitySlotUpdatePayload,
+} from '@/lib/api';
 import type {
   Meeting,
   TimeSlotAvailability,
   DailyCountDto,
   ParticipantTimeStatus,
 } from '@/types/meeting';
-import {
-  fetchDailyAvailability,
-  patchParticipantAvailability,
-  type AvailabilitySlotUpdatePayload,
-} from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
+import { buildMonthGrid } from '@/lib/helpers';
 
 // 헬퍼 함수: time 문자열 ("HH:00")을 슬롯 번호(0~23)로 변환
 const getSlotNumberFromTime = (time: string): number => {
@@ -37,35 +47,34 @@ export function MeetingCalendar({
   meeting,
   currentUserId,
 }: MeetingCalendarProps) {
-  const [currentMonth, setCurrentMonth] = React.useState(new Date());
-  const [selectedDate, setSelectedDate] = React.useState<Date | null>(null);
-  const [view, setView] = React.useState<'month' | 'day'>('month');
-  const [dailyStats, setDailyStats] = React.useState<
-    Record<string, DailyCountDto>
-  >({});
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [view, setView] = useState<'month' | 'day'>('month');
+  const [dailyStats, setDailyStats] = useState<Record<string, DailyCountDto>>(
+    {}
+  );
 
   const initialParticipant = meeting.participants?.find(
     (p) => p.userId === currentUserId
   );
   // NOTE: timeStatuses는 이제 List<ParticipantTimeStatus>이며, 각 객체는 date와 impossibleSlots를 가짐.
-  const [participantTimeStatuses, setParticipantTimeStatuses] = React.useState<
+  const [participantTimeStatuses, setParticipantTimeStatuses] = useState<
     ParticipantTimeStatus[]
   >(initialParticipant?.timeStatuses || []);
 
-  const [selectedSlots, setSelectedSlots] = React.useState<Set<string>>(
-    new Set()
-  );
-  const [isSelecting, setIsSelecting] = React.useState(false);
-  const [isDragging, setIsDragging] = React.useState(false);
-  const [dragStartIdx, setDragStartIdx] = React.useState<number | null>(null);
-  const [dragEndIdx, setDragEndIdx] = React.useState<number | null>(null);
-  const [dragTargetStatus, setDragTargetStatus] = React.useState<
+  const [slots, setSlots] = useState<TimeSlotAvailability[]>([]);
+
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartIdx, setDragStartIdx] = useState<number | null>(null);
+  const [dragEndIdx, setDragEndIdx] = useState<number | null>(null);
+  const [dragTargetStatus, setDragTargetStatus] = useState<
     'POSSIBLE' | 'IMPOSSIBLE' | null
   >(null);
 
-  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const stateRef = React.useRef({
+  const stateRef = useRef({
     isDragging,
     dragStartIdx,
     dragEndIdx,
@@ -74,7 +83,7 @@ export function MeetingCalendar({
     participantTimeStatuses,
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     stateRef.current = {
       isDragging,
       dragStartIdx,
@@ -92,229 +101,95 @@ export function MeetingCalendar({
     participantTimeStatuses,
   ]);
 
-  const getTimeSlots = (date: Date): TimeSlotAvailability[] => {
-    const slots: TimeSlotAvailability[] = [];
-    const totalParticipants =
-      meeting.participants?.length || meeting.invitedUserIds?.length || 0;
+  const currentParticipant = meeting.participants?.find(
+    (p) => p.userId === currentUserId
+  );
+  const todayStatus = currentParticipant?.timeStatuses?.find(
+    (ts) => selectedDate && ts.date === format(selectedDate, 'yyyy-MM-dd')
+  );
 
-    const currentParticipant = meeting.participants?.find(
-      (p) => p.userId === currentUserId
-    );
-    const participantStatuses = participantTimeStatuses;
+  const totalParticipants = meeting.participants?.length || 0;
 
-    // ✨ 해당 날짜의 상태 객체를 찾습니다. (DB는 'YYYY-MM-DD' 문자열로 저장)
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const todayStatus = participantStatuses.find(
-      (ts) =>
-        ts.date === dateStr ||
-        format(new Date(ts.date), 'yyyy-MM-dd') === dateStr
-    );
+  const generateDailySchedule = useCallback(
+    (date: Date): TimeSlotAvailability[] => {
+      const slots: TimeSlotAvailability[] = [];
+      const dateStr = format(date, 'yyyy-MM-dd');
 
-    for (let hour = 0; hour < 24; hour++) {
-      const time = `${hour.toString().padStart(2, '0')}:00`;
-      // NOTE: 기존의 slotStart/slotEnd Date 객체는 이제 myStatus 결정에 사용되지 않습니다.
-      const slotStart = new Date(date);
-      slotStart.setHours(hour, 0, 0, 0);
-      const slotEnd = new Date(date);
-      slotEnd.setHours(hour + 1, 0, 0, 0);
+      for (let hour = 0; hour < 24; hour++) {
+        const time = `${hour.toString().padStart(2, '0')}:00`;
+        const slotStart = new Date(date);
+        slotStart.setHours(hour, 0, 0, 0);
+        const slotEnd = new Date(date);
+        slotEnd.setHours(hour + 1, 0, 0, 0);
 
-      let availableCount = 0;
-      let myStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET' = 'UNSET';
+        let availableCount = 0;
+        let myStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET' = 'UNSET';
 
-      // 1. 후보 시간 확인 (isCandidate)
-      const isCandidate =
-        meeting.requirement.isAllDay ||
-        meeting.requirement.timeConstraints.length === 0 ||
-        meeting.requirement.timeConstraints.some((tc) => {
-          const [startHour] = tc.startTime.split(':').map(Number);
-          const [endHour] = tc.endTime.split(':').map(Number);
-          return hour >= startHour && hour < endHour;
-        });
+        const availableParticipants: string[] = [];
+        const unavailableParticipants: string[] = [];
 
-      // 2. 참여자별 상태 확인 (availableCount)
-      if (meeting.participants) {
-        availableCount = meeting.participants.reduce((count, participant) => {
-          const ts = participant.timeStatuses?.find((t) => t.date === dateStr);
-          // 해당 슬롯(hour)이 impossibleSlots에 포함되어 있지 않으면 가능
-          if (ts && ts.impossibleSlots?.includes(hour)) {
-            return count;
+        const isCandidate =
+          meeting.requirement.isAllDay ||
+          meeting.requirement.timeConstraints.length === 0 ||
+          meeting.requirement.timeConstraints.some((tc) => {
+            const [startHour] = tc.startTime.split(':').map(Number);
+            const [endHour] = tc.endTime.split(':').map(Number);
+            return hour >= startHour && hour < endHour;
+          });
+
+        if (meeting.participants) {
+          meeting.participants.forEach((participant) => {
+            const ts = participant.timeStatuses?.find(
+              (t) => t.date === dateStr
+            );
+            if (ts && ts.impossibleSlots?.includes(hour)) {
+              unavailableParticipants.push(participant.name);
+            } else {
+              availableCount++;
+              availableParticipants.push(participant.name);
+            }
+          });
+        }
+
+        if (currentParticipant && isCandidate) {
+          if (todayStatus && todayStatus.impossibleSlots?.includes(hour)) {
+            myStatus = 'IMPOSSIBLE';
+          } else {
+            myStatus = 'POSSIBLE';
           }
-          return count + 1;
-        }, 0);
-      }
-
-      // 3. ✨ 현재 사용자(My Status) 상태 결정 (슬롯 번호 기반)
-      if (currentParticipant && isCandidate) {
-        if (todayStatus && todayStatus.impossibleSlots?.includes(hour)) {
-          // 해당 날짜의 IMPOSSIBLE 슬롯 Set에 현재 hour가 포함되어 있으면 불가능
-          myStatus = 'IMPOSSIBLE';
-        } else {
-          // IMPOSSIBLE 슬롯 Set에 포함되어 있지 않으면 가능 (DB에 없는 것은 POSSIBLE로 간주)
-          myStatus = 'POSSIBLE';
         }
+
+        slots.push({
+          time,
+          availableCount,
+          totalParticipants,
+          isCandidate,
+          myStatus,
+          availableParticipants,
+          unavailableParticipants,
+        } as any);
       }
 
-      slots.push({
-        time,
-        availableCount,
-        totalParticipants,
-        isCandidate,
-        myStatus,
-      });
-    }
-    return slots;
-  };
+      return slots;
+    },
+    [meeting, currentParticipant, todayStatus, totalParticipants]
+  );
 
-  const slots = getTimeSlots(selectedDate || new Date());
-  const slotsRef = React.useRef(slots);
-  slotsRef.current = slots;
-
-  // 단일 클릭 시 슬롯 번호 요청
-  const handleSlotToggle = async (
-    time: string,
-    currentStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
-  ) => {
-    if (!selectedDate || !currentUserId) return;
-
-    const newStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
-      currentStatus === 'POSSIBLE' || currentStatus === 'UNSET'
-        ? 'IMPOSSIBLE'
-        : 'POSSIBLE';
-
-    const dateStr = format(selectedDate, 'yyyy-MM-dd');
-
-    // 슬롯 번호 기반 페이로드 생성
-    const payload: AvailabilitySlotUpdatePayload[] = [
-      {
-        date: dateStr,
-        slots: [getSlotNumberFromTime(time)],
-        status: newStatus,
-      },
-    ];
-
+  const loadDailyAvailability = useCallback(async () => {
     try {
-      const response = await patchParticipantAvailability(meeting.id, payload);
-
-      const updatedParticipant = response.participants?.find(
-        (p) => p.userId === currentUserId
-      );
-      if (updatedParticipant) {
-        setParticipantTimeStatuses(updatedParticipant.timeStatuses || []);
-      }
+      const stats = await fetchDailyAvailability(meeting.id);
+      setDailyStats(stats);
     } catch (error) {
-      console.error('Failed to update availability via PATCH', error);
+      console.error('Failed to load daily availability', error);
     }
-  };
+  }, [meeting.id]);
 
-  // 드래그 시작 상태 결정
-  const handleMouseDown = (
-    index: number,
-    status: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
-  ) => {
-    setIsDragging(true);
-    setDragStartIdx(index);
-    setDragEndIdx(index);
-
-    const targetStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
-      status === 'POSSIBLE' || status === 'UNSET' ? 'IMPOSSIBLE' : 'POSSIBLE';
-
-    setDragTargetStatus(targetStatus);
-  };
-
-  const handleMouseEnter = (index: number) => {
-    if (isDragging) {
-      setDragEndIdx(index);
-    }
-  };
-
-  // 드래그 종료 시 슬롯 번호 요청
-  const handleMouseUp = async () => {
-    const {
-      isDragging,
-      dragStartIdx,
-      dragEndIdx,
-      dragTargetStatus,
-      selectedDate,
-    } = stateRef.current;
-    const currentSlots = slotsRef.current;
-
-    if (
-      !isDragging ||
-      dragStartIdx === null ||
-      dragEndIdx === null ||
-      !dragTargetStatus ||
-      !selectedDate ||
-      !currentUserId
-    ) {
-      setIsDragging(false);
-      setDragStartIdx(null);
-      setDragEndIdx(null);
-      setDragTargetStatus(null);
-      return;
-    }
-
-    const start = Math.min(dragStartIdx, dragEndIdx);
-    const end = Math.max(dragStartIdx, dragEndIdx);
-
-    const selectedSlots: number[] = [];
-
-    for (let i = start; i <= end; i++) {
-      const slot = currentSlots[i];
-      if (slot.isCandidate) {
-        selectedSlots.push(getSlotNumberFromTime(slot.time));
-      }
-    }
-
-    if (selectedSlots.length > 0) {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-
-      const payload: AvailabilitySlotUpdatePayload[] = [
-        {
-          date: dateStr,
-          slots: selectedSlots,
-          status: dragTargetStatus,
-        },
-      ];
-
-      try {
-        const response = await patchParticipantAvailability(
-          meeting.id,
-          payload
-        );
-
-        const updatedParticipant = response.participants?.find(
-          (p) => p.userId === currentUserId
-        );
-        if (updatedParticipant) {
-          setParticipantTimeStatuses(updatedParticipant.timeStatuses || []);
-        }
-      } catch (error) {
-        console.error('Failed to batch update availability via PATCH', error);
-      }
-    }
-
-    setIsDragging(false);
-    setDragStartIdx(null);
-    setDragEndIdx(null);
-    setDragTargetStatus(null);
-  };
-
-  React.useEffect(() => {
+  useEffect(() => {
     const initialDate = new Date(meeting.requirement.dateRangeStart);
     setCurrentMonth(
       new Date(initialDate.getFullYear(), initialDate.getMonth(), 1)
     );
-
-    const loadDailyStats = async () => {
-      try {
-        const stats = await fetchDailyAvailability(meeting.id);
-        console.log('[v0] Daily stats loaded:', stats);
-        setDailyStats(stats);
-      } catch (error) {
-        console.error('Failed to load daily availability', error);
-      }
-    };
-    loadDailyStats();
+    loadDailyAvailability();
 
     const initialParticipant = meeting.participants?.find(
       (p) => p.userId === currentUserId
@@ -322,9 +197,9 @@ export function MeetingCalendar({
     if (initialParticipant) {
       setParticipantTimeStatuses(initialParticipant.timeStatuses || []);
     }
-  }, [meeting.id, currentUserId, meeting.participants]);
+  }, [meeting.id, currentUserId, meeting.participants, loadDailyAvailability]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (view === 'day' && scrollRef.current) {
       setTimeout(() => {
         const scrollContainer = scrollRef.current?.querySelector(
@@ -337,9 +212,11 @@ export function MeetingCalendar({
     }
   }, [view]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleGlobalMouseUp = () => {
-      if (isDragging) handleMouseUp();
+      if (isDragging) {
+        handleMouseUp();
+      }
     };
     window.addEventListener('mouseup', handleGlobalMouseUp);
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
@@ -373,6 +250,8 @@ export function MeetingCalendar({
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
     setView('day');
+    // 일별 뷰로 전환 시 해당 날짜의 슬롯을 미리 로드
+    setSlots(generateDailySchedule(date));
   };
 
   const handleBackToMonth = () => {
@@ -387,6 +266,204 @@ export function MeetingCalendar({
     end.setHours(23, 59, 59, 999);
     return date >= start && date <= end;
   };
+
+  const handleSlotToggle = async (
+    time: string,
+    currentStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
+  ) => {
+    if (!selectedDate || !currentParticipant) return;
+
+    const newStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
+      currentStatus === 'POSSIBLE' ? 'IMPOSSIBLE' : 'POSSIBLE';
+
+    const [hour] = time.split(':').map(Number);
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+    const payload: AvailabilitySlotUpdatePayload[] = [
+      {
+        date: dateStr,
+        slots: [hour],
+        status: newStatus,
+      },
+    ];
+
+    try {
+      await patchParticipantAvailability(meeting.id, payload);
+
+      const updatedParticipant = { ...currentParticipant };
+      const statusIndex = updatedParticipant.timeStatuses?.findIndex(
+        (ts) => ts.date === dateStr
+      );
+
+      if (statusIndex !== undefined && statusIndex >= 0) {
+        const existingStatus =
+          updatedParticipant.timeStatuses![statusIndex].impossibleSlots || [];
+        if (newStatus === 'IMPOSSIBLE') {
+          updatedParticipant.timeStatuses![statusIndex].impossibleSlots = [
+            ...existingStatus,
+            hour,
+          ];
+        } else {
+          updatedParticipant.timeStatuses![statusIndex].impossibleSlots =
+            existingStatus.filter((s) => s !== hour);
+        }
+      } else {
+        if (!updatedParticipant.timeStatuses)
+          updatedParticipant.timeStatuses = [];
+        updatedParticipant.timeStatuses.push({
+          date: dateStr,
+          impossibleSlots: newStatus === 'IMPOSSIBLE' ? [hour] : [],
+          status: 'IMPOSSIBLE',
+        });
+      }
+
+      setSlots((prevSlots) =>
+        prevSlots.map((s) =>
+          s.time === time ? { ...s, myStatus: newStatus } : s
+        )
+      );
+
+      await loadDailyAvailability();
+    } catch (error) {
+      console.error('Failed to update availability', error);
+      toast({
+        title: '업데이트 실패',
+        description: '일정을 업데이트하지 못했습니다.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleMouseDown = (
+    index: number,
+    status: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
+  ) => {
+    setIsDragging(true);
+    setDragStartIdx(index);
+    setDragEndIdx(index);
+
+    const targetStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
+      status === 'POSSIBLE' || status === 'UNSET' ? 'IMPOSSIBLE' : 'POSSIBLE';
+
+    setDragTargetStatus(targetStatus);
+  };
+
+  const handleMouseEnter = (index: number) => {
+    if (isDragging) {
+      setDragEndIdx(index);
+    }
+  };
+
+  // 드래그 종료 시 슬롯 번호 요청
+  const handleMouseUp = async () => {
+    if (
+      !isDragging ||
+      dragStartIdx === null ||
+      dragEndIdx === null ||
+      !dragTargetStatus ||
+      !selectedDate ||
+      !currentParticipant
+    ) {
+      setIsDragging(false);
+      return;
+    }
+
+    const start = Math.min(dragStartIdx, dragEndIdx);
+    const end = Math.max(dragEndIdx, dragStartIdx);
+    const selectedSlots: number[] = [];
+
+    for (let i = start; i <= end; i++) {
+      if (slots[i]?.isCandidate) {
+        const [hour] = slots[i].time.split(':').map(Number);
+        selectedSlots.push(hour);
+      }
+    }
+
+    if (selectedSlots.length === 0) {
+      setIsDragging(false);
+      return;
+    }
+
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const payload: AvailabilitySlotUpdatePayload[] = [
+      {
+        date: dateStr,
+        slots: selectedSlots,
+        status: dragTargetStatus,
+      },
+    ];
+
+    try {
+      await patchParticipantAvailability(meeting.id, payload);
+
+      const updatedParticipant = { ...currentParticipant };
+      const statusIndex = updatedParticipant.timeStatuses?.findIndex(
+        (ts) => ts.date === dateStr
+      );
+
+      if (statusIndex !== undefined && statusIndex >= 0) {
+        let existingSlots =
+          updatedParticipant.timeStatuses![statusIndex].impossibleSlots || [];
+        if (dragTargetStatus === 'IMPOSSIBLE') {
+          existingSlots = Array.from(
+            new Set([...existingSlots, ...selectedSlots])
+          );
+        } else {
+          existingSlots = existingSlots.filter(
+            (s) => !selectedSlots.includes(s)
+          );
+        }
+        updatedParticipant.timeStatuses![statusIndex].impossibleSlots =
+          existingSlots;
+      } else {
+        if (!updatedParticipant.timeStatuses)
+          updatedParticipant.timeStatuses = [];
+        updatedParticipant.timeStatuses.push({
+          date: dateStr,
+          impossibleSlots:
+            dragTargetStatus === 'IMPOSSIBLE' ? selectedSlots : [],
+          status: 'IMPOSSIBLE',
+        });
+      }
+
+      setSlots((prevSlots) =>
+        prevSlots.map((s, idx) => {
+          if (idx >= start && idx <= end && s.isCandidate) {
+            return { ...s, myStatus: dragTargetStatus };
+          }
+          return s;
+        })
+      );
+
+      await loadDailyAvailability();
+    } catch (error) {
+      console.error('Failed to batch update availability', error);
+      toast({
+        title: '업데이트 실패',
+        description: '일정을 업데이트하지 못했습니다.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDragging(false);
+      setDragStartIdx(null);
+      setDragEndIdx(null);
+      setDragTargetStatus(null);
+    }
+  };
+
+  const monthDays = Array.from({
+    length: endOfMonth(currentMonth).getDate(),
+  }).map((_, i) => {
+    const date = addDays(startOfMonth(currentMonth), i);
+    const startOfViewWeek = startOfWeek(date, { locale: ko });
+    const startOfCurrentMonth = startOfMonth(currentMonth);
+
+    // If the current day is before the start of the month, add days to the previous week
+    if (date < startOfCurrentMonth) {
+      return addDays(date, 7 - (date.getDay() === 0 ? 7 : date.getDay()));
+    }
+    return date;
+  });
 
   const renderMonthView = () => {
     const y = currentMonth.getFullYear();
@@ -566,136 +643,7 @@ export function MeetingCalendar({
 
   const renderDayView = () => {
     if (!selectedDate) return null;
-    const slots = getTimeSlots(selectedDate);
-
-    const handleSlotToggle = async (
-      time: string,
-      currentStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
-    ) => {
-      if (!selectedDate || !currentUserId) return;
-
-      const newStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
-        currentStatus === 'POSSIBLE' || currentStatus === 'UNSET'
-          ? 'IMPOSSIBLE'
-          : 'POSSIBLE';
-
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-
-      const payload: AvailabilitySlotUpdatePayload[] = [
-        {
-          date: dateStr,
-          slots: [getSlotNumberFromTime(time)],
-          status: newStatus,
-        },
-      ];
-
-      try {
-        const response = await patchParticipantAvailability(
-          meeting.id,
-          payload
-        );
-
-        const updatedParticipant = response.participants?.find(
-          (p) => p.userId === currentUserId
-        );
-        if (updatedParticipant) {
-          setParticipantTimeStatuses(updatedParticipant.timeStatuses || []);
-        }
-      } catch (error) {
-        console.error('Failed to update availability via PATCH', error);
-      }
-    };
-
-    const handleMouseDown = (
-      index: number,
-      status: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
-    ) => {
-      setIsDragging(true);
-      setDragStartIdx(index);
-      setDragEndIdx(index);
-
-      const targetStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
-        status === 'POSSIBLE' || status === 'UNSET' ? 'IMPOSSIBLE' : 'POSSIBLE';
-
-      setDragTargetStatus(targetStatus);
-    };
-
-    const handleMouseEnter = (index: number) => {
-      if (isDragging) {
-        setDragEndIdx(index);
-      }
-    };
-
-    const handleMouseUp = async () => {
-      const {
-        isDragging,
-        dragStartIdx,
-        dragEndIdx,
-        dragTargetStatus,
-        selectedDate,
-      } = stateRef.current;
-      const currentSlots = slotsRef.current;
-
-      if (
-        !isDragging ||
-        dragStartIdx === null ||
-        dragEndIdx === null ||
-        !dragTargetStatus ||
-        !selectedDate ||
-        !currentUserId
-      ) {
-        setIsDragging(false);
-        setDragStartIdx(null);
-        setDragEndIdx(null);
-        setDragTargetStatus(null);
-        return;
-      }
-
-      const start = Math.min(dragStartIdx, dragEndIdx);
-      const end = Math.max(dragStartIdx, dragEndIdx);
-
-      const selectedSlots: number[] = [];
-
-      for (let i = start; i <= end; i++) {
-        const slot = currentSlots[i];
-        if (slot.isCandidate) {
-          selectedSlots.push(getSlotNumberFromTime(slot.time));
-        }
-      }
-
-      if (selectedSlots.length > 0) {
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
-
-        const payload: AvailabilitySlotUpdatePayload[] = [
-          {
-            date: dateStr,
-            slots: selectedSlots,
-            status: dragTargetStatus,
-          },
-        ];
-
-        try {
-          const response = await patchParticipantAvailability(
-            meeting.id,
-            payload
-          );
-
-          const updatedParticipant = response.participants?.find(
-            (p) => p.userId === currentUserId
-          );
-          if (updatedParticipant) {
-            setParticipantTimeStatuses(updatedParticipant.timeStatuses || []);
-          }
-        } catch (error) {
-          console.error('Failed to batch update availability via PATCH', error);
-        }
-      }
-
-      setIsDragging(false);
-      setDragStartIdx(null);
-      setDragEndIdx(null);
-      setDragTargetStatus(null);
-    };
+    const currentSlots = generateDailySchedule(selectedDate);
 
     return (
       <Card className="flex h-full flex-col overflow-hidden shadow-lg border-0 sm:border">
@@ -705,7 +653,7 @@ export function MeetingCalendar({
               variant="ghost"
               size="sm"
               onClick={handleBackToMonth}
-              className="gap-1 pl-0 hover:bg-transparent hover:text-primary"
+              className="gap-1 hover:bg-accent text-foreground"
             >
               <ChevronLeft className="h-5 w-5" />
               <span className="text-lg font-bold">
@@ -715,49 +663,42 @@ export function MeetingCalendar({
           </div>
           <div className="flex items-center gap-3 text-xs font-medium">
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 bg-green-500 rounded-sm"></div>
+              <div className="w-3 h-3 bg-emerald-500 rounded-sm" />
               <span>가능</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 bg-red-500 rounded-sm"></div>
+              <div className="w-3 h-3 bg-rose-400 rounded-sm" />
               <span>불가능</span>
             </div>
           </div>
         </div>
 
         <div
-          className="flex-1 overflow-y-auto scrollbar-hide bg-background"
+          className="flex-1 overflow-y-auto relative"
+          ref={scrollRef}
           onMouseUp={handleMouseUp}
-          onMouseLeave={() => {
-            if (isDragging) handleMouseUp();
-          }}
+          onMouseLeave={handleMouseUp}
         >
-          <div className="relative min-h-full pb-10">
-            <div className="absolute left-0 top-0 bottom-0 w-16 border-r border-border/50 bg-muted/5 z-10">
-              {Array.from({ length: 24 }, (_, hour) => (
+          <div className="relative">
+            {/* 시간대 레이블들 - 1시부터 23시까지 */}
+            {Array.from({ length: 23 }).map((_, idx) => {
+              const hour = idx + 1; // 1시부터 시작
+              return (
                 <div
-                  key={`label-${hour}`}
-                  className="h-14 flex items-start justify-center pt-2"
+                  key={`time-label-${hour}`}
+                  className="absolute left-0 w-16 flex items-center justify-end pr-2 pointer-events-none"
+                  style={{ top: `${(idx + 1) * 56}px` }}
                 >
                   <span className="text-xs font-medium text-muted-foreground">
-                    {hour.toString().padStart(2, '0')}:00
+                    {`${hour.toString().padStart(2, '0')}:00`}
                   </span>
                 </div>
-              ))}
-              {/* 24시 라벨 추가 */}
-              <div className="h-14 flex items-start justify-center pt-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  24:00
-                </span>
-              </div>
-            </div>
+              );
+            })}
 
-            <div className="ml-16">
-              {slots.map((slot, index) => {
-                const availabilityRatio =
-                  slot.totalParticipants > 0
-                    ? slot.availableCount / slot.totalParticipants
-                    : 0;
+            {/* 시간대 슬롯들 - 24개 모두 표시 (0~23시) */}
+            <div className="pl-16 border-l">
+              {currentSlots.map((slot, index) => {
                 let isAvailable = slot.myStatus === 'POSSIBLE';
                 let isUnavailable = slot.myStatus === 'IMPOSSIBLE';
 
@@ -768,12 +709,23 @@ export function MeetingCalendar({
                   dragTargetStatus
                 ) {
                   const start = Math.min(dragStartIdx, dragEndIdx);
-                  const end = Math.max(dragStartIdx, dragEndIdx);
+                  const end = Math.max(dragEndIdx, dragStartIdx);
                   if (index >= start && index <= end && slot.isCandidate) {
                     isAvailable = dragTargetStatus === 'POSSIBLE';
                     isUnavailable = dragTargetStatus === 'IMPOSSIBLE';
                   }
                 }
+
+                const slotWithParticipants = slot as TimeSlotAvailability & {
+                  availableParticipants?: string[];
+                  unavailableParticipants?: string[];
+                };
+
+                const availableRatio =
+                  slot.totalParticipants > 0
+                    ? slot.availableCount / slot.totalParticipants
+                    : 0;
+                const unavailableRatio = 1 - availableRatio;
 
                 return (
                   <div
@@ -791,83 +743,98 @@ export function MeetingCalendar({
                       handleSlotToggle(slot.time, slot.myStatus)
                     }
                     className={cn(
-                      'h-14 border-b border-border/50 relative flex items-center px-4 transition-colors select-none',
+                      'h-14 border-t border-border/30 relative flex items-center transition-colors select-none',
                       slot.isCandidate
-                        ? 'cursor-pointer hover:bg-accent/30'
+                        ? 'cursor-pointer hover:opacity-90'
                         : 'bg-muted/10 cursor-not-allowed opacity-50',
-                      isAvailable && 'bg-green-500/10',
-                      isUnavailable && 'bg-red-500/10',
                       isDragging &&
                         dragStartIdx !== null &&
                         dragEndIdx !== null &&
                         index >= Math.min(dragStartIdx, dragEndIdx) &&
-                        index <= Math.max(dragStartIdx, dragEndIdx) &&
+                        index <= Math.max(dragEndIdx, dragStartIdx) &&
                         slot.isCandidate
                         ? 'ring-2 ring-primary ring-inset'
                         : ''
                     )}
                   >
+                    {/* 가능 영역 */}
                     {slot.isCandidate && slot.availableCount > 0 && (
                       <div
-                        className="absolute left-0 top-0 bottom-0 bg-blue-500/5 transition-all duration-500"
-                        style={{ width: `${availabilityRatio * 100}%` }}
-                      />
+                        className="absolute left-0 top-0 bottom-0 bg-teal-50 dark:bg-teal-900/40 transition-all duration-300 flex items-center justify-start px-3"
+                        style={{ width: `${availableRatio * 100}%` }}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-teal-700 dark:text-teal-300">
+                            {slot.availableCount}명 가능
+                          </span>
+                          {slotWithParticipants.availableParticipants &&
+                            slotWithParticipants.availableParticipants.length >
+                              0 && (
+                              <span className="text-[10px] text-teal-600 dark:text-teal-400">
+                                {slotWithParticipants.availableParticipants.join(
+                                  ', '
+                                )}
+                              </span>
+                            )}
+                        </div>
+                      </div>
                     )}
 
-                    <div className="relative z-10 flex items-center justify-between w-full">
-                      <div className="flex flex-col">
-                        <span className="text-xs text-muted-foreground">
-                          {slot.availableCount}/{slot.totalParticipants}명 가능
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {isAvailable && (
-                          <div className="flex items-center gap-1 text-green-600 bg-green-100/50 px-2 py-1 rounded-full">
-                            <div className="w-2 h-2 rounded-full bg-green-500" />
-                            <span className="text-xs font-bold">참여 가능</span>
-                          </div>
-                        )}
-                        {isUnavailable && (
-                          <div className="flex items-center gap-1 text-red-600 bg-red-100/50 px-2 py-1 rounded-full">
-                            <div className="w-2 h-2 rounded-full bg-red-500" />
-                            <span className="text-xs font-bold">참여 불가</span>
-                          </div>
-                        )}
-                        {slot.isCandidate &&
-                          slot.myStatus === 'UNSET' &&
-                          !isDragging && (
-                            <span className="text-xs text-muted-foreground/50">
-                              선택하여 설정
+                    {/* 불가능 영역 */}
+                    {slot.isCandidate &&
+                      slot.totalParticipants - slot.availableCount > 0 && (
+                        <div
+                          className="absolute top-0 bottom-0 bg-pink-50 dark:bg-pink-900/30 transition-all duration-300 flex items-center justify-start px-3 pr-24"
+                          style={{
+                            right: 0,
+                            width: `${unavailableRatio * 100}%`,
+                          }}
+                        >
+                          <div className="flex flex-col items-start">
+                            <span className="text-xs font-bold text-pink-700 dark:text-pink-300">
+                              {slot.totalParticipants - slot.availableCount}명
+                              불가
                             </span>
-                          )}
-                      </div>
+                            {slotWithParticipants.unavailableParticipants &&
+                              slotWithParticipants.unavailableParticipants
+                                .length > 0 && (
+                                <span className="text-[10px] text-pink-600 dark:text-pink-400">
+                                  {slotWithParticipants.unavailableParticipants.join(
+                                    ', '
+                                  )}
+                                </span>
+                              )}
+                          </div>
+                        </div>
+                      )}
+
+                    {/* 내 참여 상태 뱃지 */}
+                    <div className="absolute right-2 flex items-center gap-2 z-10 pointer-events-none">
+                      {isAvailable && (
+                        <div className="flex items-center gap-1 text-teal-700 dark:text-teal-300 bg-teal-100/95 dark:bg-teal-900/80 px-2 py-1 rounded-full shadow-sm">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                          <span className="text-xs font-bold">참여 가능</span>
+                        </div>
+                      )}
+                      {isUnavailable && (
+                        <div className="flex items-center gap-1 text-rose-700 bg-rose-100/95 dark:bg-rose-900/80 px-2 py-1 rounded-full shadow-sm">
+                          <div className="w-2 h-2 rounded-full bg-rose-500" />
+                          <span className="text-xs font-bold">참여 불가</span>
+                        </div>
+                      )}
                     </div>
 
+                    {/* 왼쪽 세로 표시선 */}
                     {isAvailable && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-green-500" />
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500 z-10" />
                     )}
                     {isUnavailable && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500" />
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 z-10" />
                     )}
                   </div>
                 );
               })}
             </div>
-
-            {isToday(selectedDate) && (
-              <div
-                className="absolute left-0 right-0 border-t-2 border-red-500 z-20 pointer-events-none flex items-center"
-                style={{
-                  top: `${
-                    new Date().getHours() * 56 +
-                    (new Date().getMinutes() / 60) * 56
-                  }px`,
-                }}
-              >
-                <div className="w-2 h-2 bg-red-500 rounded-full -ml-1" />
-              </div>
-            )}
           </div>
         </div>
       </Card>

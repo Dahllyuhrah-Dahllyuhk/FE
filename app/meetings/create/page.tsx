@@ -33,6 +33,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import { createMeeting, fetchFriends, type FriendDto } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const formSchema = z.object({
   name: z.string().min(1, '모임 이름을 입력해주세요.'),
@@ -89,6 +96,17 @@ export default function CreateMeetingPage() {
   });
 
   const isAllDay = form.watch('isAllDay');
+
+  const generateTimeOptions = () => {
+    const options = [];
+    for (let hour = 0; hour < 24; hour++) {
+      const time = `${hour.toString().padStart(2, '0')}:00`;
+      options.push(time);
+    }
+    return options;
+  };
+
+  const timeOptions = generateTimeOptions();
 
   useEffect(() => {
     const loadFriends = async () => {
@@ -269,38 +287,75 @@ export default function CreateMeetingPage() {
                     </Button>
                   </div>
                   {fields.map((field, index) => (
-                    <div key={field.id} className="flex items-end gap-2">
-                      <FormField
-                        control={form.control}
-                        name={`timeConstraints.${index}.startTime`}
-                        render={({ field }) => (
-                          <FormItem className="flex-1">
-                            <FormLabel className="text-xs">시작</FormLabel>
-                            <FormControl>
-                              <Input type="time" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`timeConstraints.${index}.endTime`}
-                        render={({ field }) => (
-                          <FormItem className="flex-1">
-                            <FormLabel className="text-xs">종료</FormLabel>
-                            <FormControl>
-                              <Input type="time" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                    <div
+                      key={field.id}
+                      className="flex items-center gap-3 p-4 rounded-lg border border-border bg-muted/30"
+                    >
+                      <div className="flex-1 grid grid-cols-2 gap-3">
+                        <FormField
+                          control={form.control}
+                          name={`timeConstraints.${index}.startTime`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">
+                                시작 시간
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="h-11">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {timeOptions.map((time) => (
+                                    <SelectItem key={time} value={time}>
+                                      {time}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`timeConstraints.${index}.endTime`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs font-medium text-muted-foreground">
+                                종료 시간
+                              </FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="h-11">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {timeOptions.map((time) => (
+                                    <SelectItem key={time} value={time}>
+                                      {time}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="mb-0.5"
+                        className="shrink-0 mt-6"
                         onClick={() => remove(index)}
                         disabled={fields.length === 1}
                       >

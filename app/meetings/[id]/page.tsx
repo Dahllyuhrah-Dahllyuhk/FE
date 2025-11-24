@@ -28,6 +28,7 @@ import {
   deleteMeeting,
   acceptMeetingInvitation,
   inviteUserToMeeting,
+  updateParticipantSettings,
 } from '@/lib/api';
 import type { Meeting } from '@/types/meeting';
 import {
@@ -41,6 +42,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 
 export default function MeetingDetailPage({
   params,
@@ -55,6 +66,11 @@ export default function MeetingDetailPage({
   const [isLoading, setIsLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
   const [isInviting, setIsInviting] = useState(false);
+
+  const [showAcceptDialog, setShowAcceptDialog] = useState(false);
+  const [reflectTimetable, setReflectTimetable] = useState(true);
+  const [reflectCalendar, setReflectCalendar] = useState(true);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -75,9 +91,6 @@ export default function MeetingDetailPage({
     loadData();
   }, [id]);
 
-  // ✨ 삭제: handleAvailabilityUpdate 함수를 제거합니다.
-  // 이 로직은 이제 meeting-calendar.tsx 내부에서 patchParticipantAvailability를 직접 호출하며 처리됩니다.
-
   const handleDeleteMeeting = async () => {
     if (!meeting) return;
 
@@ -97,16 +110,31 @@ export default function MeetingDetailPage({
     }
   };
 
-  const handleAcceptInvitation = async () => {
+  const handleAcceptInvitationClick = () => {
+    setShowAcceptDialog(true);
+  };
+
+  const handleConfirmAccept = async () => {
     if (!meeting?.id) return;
 
     try {
+      setIsAccepting(true);
+
+      await updateParticipantSettings(meeting.id, {
+        reflectTimetable,
+        reflectCalendar,
+      });
+
       const updatedMeeting = await acceptMeetingInvitation(meeting.id);
-      // API 응답으로 새로운 Meeting 객체가 돌아오므로, 다시 fetch할 필요 없이 바로 상태 업데이트
-      setMeeting(updatedMeeting);
+
+      // 3. 모임 데이터 새로고침
+      const refreshedMeeting = await fetchMeeting(meeting.id);
+      setMeeting(refreshedMeeting);
+
+      setShowAcceptDialog(false);
       toast({
         title: '초대 수락 완료',
-        description: '모임 참여가 확정되었습니다. 일정을 등록해주세요.',
+        description: '모임 참여가 확정되었습니다. 일정을 조율해주세요.',
       });
     } catch (error) {
       console.error('Failed to accept invitation:', error);
@@ -115,6 +143,8 @@ export default function MeetingDetailPage({
         description: '초대 수락에 실패했습니다.',
         variant: 'destructive',
       });
+    } finally {
+      setIsAccepting(false);
     }
   };
 
@@ -124,9 +154,7 @@ export default function MeetingDetailPage({
 
     setIsInviting(true);
     try {
-      // NOTE: 백엔드는 이메일 대신 사용자 ID를 기대할 수 있으므로, API 구현 확인 필요
       const updatedMeeting = await inviteUserToMeeting(meeting.id, inviteEmail);
-      // API 응답으로 새로운 Meeting 객체가 돌아오므로, 바로 상태 업데이트
       setMeeting(updatedMeeting);
       setInviteEmail('');
       toast({
@@ -171,7 +199,6 @@ export default function MeetingDetailPage({
   );
   const isPending = currentParticipant?.status === 'PENDING';
 
-  // ✨ 수정: isAccepted는 PENDING이 아니거나 호스트인 경우로 정의
   const isAccepted =
     !isPending && (currentParticipant?.status === 'ACCEPTED' || isHost);
 
@@ -232,18 +259,18 @@ export default function MeetingDetailPage({
           <div className="max-w-6xl mx-auto space-y-6">
             {/* PENDING 상태 알림 및 수락 버튼 */}
             {isPending && (
-              <Card className="border-yellow-200 bg-yellow-50">
+              <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/30">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div>
-                    <p className="font-medium text-yellow-900">
+                    <p className="font-medium text-yellow-900 dark:text-yellow-100">
                       초대된 모임입니다
                     </p>
-                    <p className="text-sm text-yellow-700">
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300">
                       참여하여 일정을 조율하시겠습니까?
                     </p>
                   </div>
                   <Button
-                    onClick={handleAcceptInvitation}
+                    onClick={handleAcceptInvitationClick}
                     className="bg-yellow-600 hover:bg-yellow-700 text-white w-full sm:w-auto"
                   >
                     <Check className="mr-2 h-4 w-4" /> 수락하고 일정 반영
@@ -251,6 +278,61 @@ export default function MeetingDetailPage({
                 </CardContent>
               </Card>
             )}
+
+            <Dialog open={showAcceptDialog} onOpenChange={setShowAcceptDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>일정 반영 설정</DialogTitle>
+                  <DialogDescription>
+                    내 시간표와 캘린더 일정을 자동으로 반영하시겠습니까? 나중에
+                    설정에서 변경할 수 있습니다.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="timetable" className="flex flex-col gap-1">
+                      <span>주간 시간표 반영</span>
+                      <span className="text-xs text-muted-foreground font-normal">
+                        내 주간 시간표를 자동으로 불가능 시간으로 설정합니다
+                      </span>
+                    </Label>
+                    <Switch
+                      id="timetable"
+                      checked={reflectTimetable}
+                      onCheckedChange={setReflectTimetable}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="calendar" className="flex flex-col gap-1">
+                      <span>캘린더 일정 반영</span>
+                      <span className="text-xs text-muted-foreground font-normal">
+                        내 캘린더 일정을 자동으로 불가능 시간으로 설정합니다
+                      </span>
+                    </Label>
+                    <Switch
+                      id="calendar"
+                      checked={reflectCalendar}
+                      onCheckedChange={setReflectCalendar}
+                    />
+                  </div>
+                </div>
+
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAcceptDialog(false)}
+                    disabled={isAccepting}
+                  >
+                    취소
+                  </Button>
+                  <Button onClick={handleConfirmAccept} disabled={isAccepting}>
+                    {isAccepting ? '수락 중...' : '확인'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             <Card className="p-4">
               <div className="mb-4 flex items-start justify-between">
@@ -316,15 +398,9 @@ export default function MeetingDetailPage({
                 <p className="mb-4 text-sm text-muted-foreground">
                   가능한 날짜와 시간을 선택해주세요.
                 </p>
-                <MeetingCalendar
-                  meeting={meeting}
-                  currentUserId={user?.id}
-                  // ✨ 수정: onUpdateAvailability prop을 제거합니다.
-                  // 이 prop은 이제 meeting-calendar.tsx에서 필요하지 않습니다.
-                />
+                <MeetingCalendar meeting={meeting} currentUserId={user?.id} />
               </div>
             ) : (
-              // PENDING 상태이거나, 참여하지 않은 경우 (초대 수락 유도)
               <div className="flex flex-col items-center justify-center h-64 text-muted-foreground border rounded-lg bg-muted/10">
                 <Calendar className="h-12 w-12 mb-4 opacity-20" />
                 <p>초대를 수락하면 일정을 조율할 수 있습니다.</p>
