@@ -1,7 +1,7 @@
 // FE/hooks/useEventRefresh.ts
 'use client';
 
-import React, {
+import {
   createContext,
   useCallback,
   useContext,
@@ -40,10 +40,19 @@ export function EventRefreshProvider({ children }: ProviderProps) {
 
 export function useEventRefresh(): EventRefreshContextValue {
   const ctx = useContext(EventRefreshContext);
+
+  // Provider가 없는 경우 fallback 값 반환 (페이지 새로고침 없이)
   if (!ctx) {
-    throw new Error(
-      'useEventRefresh는 EventRefreshProvider 안에서만 사용할 수 있습니다.'
-    );
+    return {
+      trigger: 0,
+      refresh: () => {
+        // fallback: 아무것도 하지 않음 (페이지 새로고침 방지)
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('useEventRefresh: EventRefreshProvider가 없습니다.');
+        }
+      },
+    };
   }
+
   return ctx;
 }

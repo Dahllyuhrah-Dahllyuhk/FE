@@ -7,11 +7,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { CalendarIcon, X, Plus } from 'lucide-react';
+import { CalendarIcon, X } from 'lucide-react';
 
 import { ProtectedRoute } from '@/components/protected-route';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { LegacyTimeRangeSelector } from '@/components/time-range-selector';
 import {
   Form,
   FormControl,
@@ -65,7 +66,7 @@ const formSchema = z.object({
           ),
       })
     )
-    .optional(),
+    .default([{ startTime: '09:00', endTime: '18:00' }]),
   invitedUserIds: z
     .array(z.string())
     .min(1, '최소 1명의 친구를 초대해야 합니다.'),
@@ -136,7 +137,7 @@ export default function CreateMeetingPage() {
           dateRangeStart: format(values.dateRange.from, 'yyyy-MM-dd'),
           dateRangeEnd: format(values.dateRange.to, 'yyyy-MM-dd'),
           isAllDay: values.isAllDay,
-          timeConstraints: values.isAllDay ? [] : values.timeConstraints || [],
+          timeConstraints: values.isAllDay ? [] : values.timeConstraints ?? [],
         },
         defaultReflectTimetable: values.reflectTimetable, // requirement 밖으로 이동
         defaultReflectCalendar: values.reflectCalendar, // requirement 밖으로 이동
@@ -272,100 +273,42 @@ export default function CreateMeetingPage() {
 
               {!isAllDay && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <FormLabel className="text-base">시간 제약</FormLabel>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        append({ startTime: '09:00', endTime: '18:00' })
-                      }
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      시간 추가
-                    </Button>
-                  </div>
-                  {fields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="flex items-center gap-3 p-4 rounded-lg border border-border bg-muted/30"
-                    >
-                      <div className="flex-1 grid grid-cols-2 gap-3">
-                        <FormField
-                          control={form.control}
-                          name={`timeConstraints.${index}.startTime`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                시작 시간
-                              </FormLabel>
-                              <Select
-                                onValueChange={field.onChange}
-                                value={field.value}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="h-11">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {timeOptions.map((time) => (
-                                    <SelectItem key={time} value={time}>
-                                      {time}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`timeConstraints.${index}.endTime`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs font-medium text-muted-foreground">
-                                종료 시간
-                              </FormLabel>
-                              <Select
-                                onValueChange={field.onChange}
-                                value={field.value}
-                              >
-                                <FormControl>
-                                  <SelectTrigger className="h-11">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {timeOptions.map((time) => (
-                                    <SelectItem key={time} value={time}>
-                                      {time}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 mt-6"
-                        onClick={() => remove(index)}
-                        disabled={fields.length === 1}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                  <FormLabel className="text-base">시간 제약</FormLabel>
                   <FormDescription>
-                    모임이 가능한 시간대를 설정하세요. (예: 10:00 ~ 12:00)
+                    드래그하여 모임이 가능한 시간대를 설정하세요.
                   </FormDescription>
+
+                  <div className="space-y-6">
+                    {fields.map((field, index) => (
+                      <div
+                        key={field.id}
+                        className="relative p-4 rounded-lg border border-border bg-card"
+                      >
+                        <div className="max-h-[400px] overflow-y-auto">
+                          <LegacyTimeRangeSelector
+                            startTime={form.watch(
+                              `timeConstraints.${index}.startTime`
+                            )}
+                            endTime={form.watch(
+                              `timeConstraints.${index}.endTime`
+                            )}
+                            onStartTimeChange={(time: string) =>
+                              form.setValue(
+                                `timeConstraints.${index}.startTime`,
+                                time
+                              )
+                            }
+                            onEndTimeChange={(time: string) =>
+                              form.setValue(
+                                `timeConstraints.${index}.endTime`,
+                                time
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

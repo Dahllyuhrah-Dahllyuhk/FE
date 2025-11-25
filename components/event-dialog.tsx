@@ -45,25 +45,50 @@ export function EventDialog({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [color, setColor] = useState('bg-blue-500');
-  const [allDay, setAllDay] = useState(false);
+  const [allDay, setAllDay] = useState(true);
 
   useEffect(() => {
     if (event) {
       setTitle(event.title);
       setDescription(event.description);
-      setAllDay(event.allDay || false);
-      setStartDate(formatDateTimeLocal(event.startDate, event.allDay || false));
-      setEndDate(formatDateTimeLocal(event.endDate, event.allDay || false));
+      setAllDay(event.allDay ?? true);
+      setStartDate(formatDateTimeLocal(event.startDate, event.allDay ?? true));
+      setEndDate(formatDateTimeLocal(event.endDate, event.allDay ?? true));
       setColor(event.color);
     } else if (dateRange) {
       setTitle('');
       setDescription('');
-      setAllDay(false);
-      setStartDate(formatDateTimeLocal(dateRange.start, false));
-      setEndDate(formatDateTimeLocal(dateRange.end, false));
+      setAllDay(true);
+      setStartDate(formatDateTimeLocal(dateRange.start, true));
+      setEndDate(formatDateTimeLocal(dateRange.end, true));
       setColor('bg-blue-500');
     }
   }, [event, dateRange]);
+
+  useEffect(() => {
+    if (startDate) {
+      // 기존 날짜에서 날짜 부분만 추출
+      const datePart = startDate.split('T')[0];
+      if (allDay) {
+        setStartDate(datePart);
+      } else {
+        // 종일 -> 시간 있는 형식으로 변환할 때 기본 시간 추가
+        if (!startDate.includes('T')) {
+          setStartDate(`${datePart}T09:00`);
+        }
+      }
+    }
+    if (endDate) {
+      const datePart = endDate.split('T')[0];
+      if (allDay) {
+        setEndDate(datePart);
+      } else {
+        if (!endDate.includes('T')) {
+          setEndDate(`${datePart}T10:00`);
+        }
+      }
+    }
+  }, [allDay]);
 
   const formatDateTimeLocal = (date: Date, isAllDay: boolean) => {
     const year = date.getFullYear();
@@ -71,7 +96,6 @@ export function EventDialog({
     const day = String(date.getDate()).padStart(2, '0');
 
     if (isAllDay) {
-      // For all-day events, return date only
       return `${year}-${month}-${day}`;
     }
 
@@ -107,7 +131,7 @@ export function EventDialog({
     setStartDate('');
     setEndDate('');
     setColor('bg-blue-500');
-    setAllDay(false);
+    setAllDay(true);
   };
 
   return (

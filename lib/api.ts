@@ -8,6 +8,7 @@ import type {
   AvailableSlot,
   ParticipantTimeStatus,
   DailyCountDto,
+  MeetingStatusUpdateRequest,
 } from '@/types/meeting';
 
 // ✨ FriendDto 정의 (API 파일 내부에 위치)
@@ -345,6 +346,21 @@ export async function inviteUserToMeeting(
   const res = await apiFetch(`/api/meetings/${meetingId}/invite`, {
     method: 'POST',
     body: JSON.stringify({ email }),
+  });
+  return res.json();
+}
+
+/**
+ * 모임 상태 변경 (Host only)
+ * PATCH /api/meetings/{id}/state
+ */
+export async function updateMeetingState(
+  id: string,
+  body: MeetingStatusUpdateRequest
+): Promise<Meeting> {
+  const res = await apiFetch(`/api/meetings/${id}/state`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
   });
   return res.json();
 }
