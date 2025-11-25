@@ -690,7 +690,6 @@ export default function MeetingSettingsPage({
                                       <img
                                         src={
                                           friend.profileImageUrl ||
-                                          '/placeholder.svg' ||
                                           '/placeholder.svg'
                                         }
                                         alt={friend.nickname}

@@ -34,6 +34,13 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import { createMeeting, fetchFriends, type FriendDto } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const formSchema = z.object({
   name: z.string().min(1, '모임 이름을 입력해주세요.'),
@@ -90,6 +97,17 @@ export default function CreateMeetingPage() {
   });
 
   const isAllDay = form.watch('isAllDay');
+
+  const generateTimeOptions = () => {
+    const options = [];
+    for (let hour = 0; hour < 24; hour++) {
+      const time = `${hour.toString().padStart(2, '0')}:00`;
+      options.push(time);
+    }
+    return options;
+  };
+
+  const timeOptions = generateTimeOptions();
 
   useEffect(() => {
     const loadFriends = async () => {
