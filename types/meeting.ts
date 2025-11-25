@@ -57,6 +57,8 @@ export type TimeSlotAvailability = {
   totalParticipants: number;
   isCandidate: boolean;
   myStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET';
+  availableParticipants?: string[];
+  unavailableParticipants?: string[];
 };
 
 // 모임 수정 DTO (호스트용)

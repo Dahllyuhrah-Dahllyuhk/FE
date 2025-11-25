@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Plus, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { ProtectedRoute } from '@/components/protected-route';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,13 @@ import {
 import type { Meeting, MeetingUpdateRequest } from '@/types/meeting';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export default function MeetingSettingsPage({
   params,
@@ -41,6 +48,9 @@ export default function MeetingSettingsPage({
   const [dateRangeStart, setDateRangeStart] = useState('');
   const [dateRangeEnd, setDateRangeEnd] = useState('');
   const [isAllDay, setIsAllDay] = useState(false);
+  const [timeConstraints, setTimeConstraints] = useState<
+    { startTime: string; endTime: string }[]
+  >([]);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [friends, setFriends] = useState<FriendDto[]>([]);
 
@@ -66,6 +76,17 @@ export default function MeetingSettingsPage({
           format(new Date(meetingData.requirement.dateRangeEnd), 'yyyy-MM-dd')
         );
         setIsAllDay(meetingData.requirement.isAllDay);
+
+        const parsedConstraints =
+          meetingData.requirement.timeConstraints &&
+          meetingData.requirement.timeConstraints.length > 0
+            ? meetingData.requirement.timeConstraints.map((constraint) => ({
+                startTime: constraint.startTime.substring(0, 5), // "09:00:00" -> "09:00"
+                endTime: constraint.endTime.substring(0, 5), // "18:00:00" -> "18:00"
+              }))
+            : [{ startTime: '09:00', endTime: '18:00' }];
+
+        setTimeConstraints(parsedConstraints);
 
         setSelectedFriends(
           meetingData.participants
@@ -133,11 +154,16 @@ export default function MeetingSettingsPage({
           return;
         }
 
+        const constraintsWithSeconds = timeConstraints.map((constraint) => ({
+          startTime: `${constraint.startTime}:00`,
+          endTime: `${constraint.endTime}:00`,
+        }));
+
         const requirementPayload = {
           dateRangeStart,
           dateRangeEnd,
           isAllDay,
-          timeConstraints: meeting.requirement.timeConstraints || [],
+          timeConstraints: isAllDay ? [] : constraintsWithSeconds,
         };
 
         console.log(
@@ -180,6 +206,40 @@ export default function MeetingSettingsPage({
     );
   };
 
+  const addTimeConstraint = () => {
+    setTimeConstraints([
+      ...timeConstraints,
+      { startTime: '09:00', endTime: '18:00' },
+    ]);
+  };
+
+  const removeTimeConstraint = (index: number) => {
+    if (timeConstraints.length > 1) {
+      setTimeConstraints(timeConstraints.filter((_, i) => i !== index));
+    }
+  };
+
+  const updateTimeConstraint = (
+    index: number,
+    field: 'startTime' | 'endTime',
+    value: string
+  ) => {
+    const updated = [...timeConstraints];
+    updated[index][field] = value;
+    setTimeConstraints(updated);
+  };
+
+  const generateTimeOptions = () => {
+    const options = [];
+    for (let hour = 0; hour < 24; hour++) {
+      const time = `${hour.toString().padStart(2, '0')}:00`;
+      options.push(time);
+    }
+    return options;
+  };
+
+  const timeOptions = generateTimeOptions();
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -220,32 +280,32 @@ export default function MeetingSettingsPage({
             <Card className="p-6">
               <h2 className="text-lg font-semibold mb-4">내 일정 반영 설정</h2>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="timetable" className="flex flex-col gap-1">
-                    <span>주간 시간표 반영</span>
-                    <span className="text-xs text-muted-foreground font-normal">
-                      내 주간 시간표를 모임 일정에 반영합니다
-                    </span>
-                  </Label>
-                  <Switch
-                    id="timetable"
-                    checked={reflectTimetable}
-                    onCheckedChange={setReflectTimetable}
-                  />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="timetable">주간 시간표 반영</Label>
+                    <Switch
+                      id="timetable"
+                      checked={reflectTimetable}
+                      onCheckedChange={setReflectTimetable}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    내 주간 시간표를 모임 일정에 반영합니다
+                  </p>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="calendar" className="flex flex-col gap-1">
-                    <span>캘린더 일정 반영</span>
-                    <span className="text-xs text-muted-foreground font-normal">
-                      내 캘린더 일정을 모임 일정에 반영합니다
-                    </span>
-                  </Label>
-                  <Switch
-                    id="calendar"
-                    checked={reflectCalendar}
-                    onCheckedChange={setReflectCalendar}
-                  />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="calendar">캘린더 일정 반영</Label>
+                    <Switch
+                      id="calendar"
+                      checked={reflectCalendar}
+                      onCheckedChange={setReflectCalendar}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    내 캘린더 일정을 모임 일정에 반영합니다
+                  </p>
                 </div>
               </div>
             </Card>
@@ -303,21 +363,110 @@ export default function MeetingSettingsPage({
                       </div>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label htmlFor="allday" className="flex flex-col gap-1">
-                          <span>하루 종일</span>
-                          <span className="text-xs text-muted-foreground font-normal">
-                            특정 시간대가 아닌 하루 전체를 선택합니다
-                          </span>
-                        </Label>
+                        <Label htmlFor="allday">하루 종일</Label>
                         <Switch
                           id="allday"
                           checked={isAllDay}
                           onCheckedChange={setIsAllDay}
                         />
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        특정 시간대가 아닌 하루 전체를 선택합니다
+                      </p>
                     </div>
+
+                    {!isAllDay && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-base">시간 제약</Label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={addTimeConstraint}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            시간 추가
+                          </Button>
+                        </div>
+                        {timeConstraints.map((constraint, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center gap-3 p-4 rounded-lg border border-border bg-muted/30"
+                          >
+                            <div className="flex-1 grid grid-cols-2 gap-3">
+                              <div className="space-y-2">
+                                <Label className="text-xs font-medium text-muted-foreground">
+                                  시작 시간
+                                </Label>
+                                <Select
+                                  value={constraint.startTime}
+                                  onValueChange={(value) =>
+                                    updateTimeConstraint(
+                                      index,
+                                      'startTime',
+                                      value
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger className="h-11">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {timeOptions.map((time) => (
+                                      <SelectItem key={time} value={time}>
+                                        {time}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs font-medium text-muted-foreground">
+                                  종료 시간
+                                </Label>
+                                <Select
+                                  value={constraint.endTime}
+                                  onValueChange={(value) =>
+                                    updateTimeConstraint(
+                                      index,
+                                      'endTime',
+                                      value
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger className="h-11">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {timeOptions.map((time) => (
+                                      <SelectItem key={time} value={time}>
+                                        {time}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeTimeConstraint(index)}
+                              disabled={timeConstraints.length === 1}
+                              className="shrink-0 mt-6"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        <p className="text-xs text-muted-foreground">
+                          모임이 가능한 시간대를 설정하세요. (예: 10:00 ~ 12:00)
+                        </p>
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <Label>참여자 관리</Label>
@@ -354,7 +503,6 @@ export default function MeetingSettingsPage({
                                       <img
                                         src={
                                           friend.profileImageUrl ||
-                                          '/placeholder.svg' ||
                                           '/placeholder.svg'
                                         }
                                         alt={friend.nickname}
@@ -379,7 +527,6 @@ export default function MeetingSettingsPage({
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {/* 호스트 + 선택된 친구 수 */}
                         {1 + selectedFriends.length}명 참여자 (호스트 포함)
                       </p>
                     </div>
