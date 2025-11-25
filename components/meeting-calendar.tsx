@@ -1,19 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  addDays,
-  isSameDay,
-  isToday,
-  addMonths,
-  subMonths,
-} from 'date-fns';
+import { format, isToday, addMonths, subMonths } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -41,11 +31,13 @@ interface MeetingCalendarProps {
   meeting: Meeting;
   currentUserEmail?: string;
   currentUserId?: string;
+  readonly?: boolean;
 }
 
 export function MeetingCalendar({
   meeting,
   currentUserId,
+  readonly = false,
 }: MeetingCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -57,7 +49,6 @@ export function MeetingCalendar({
   const initialParticipant = meeting.participants?.find(
     (p) => p.userId === currentUserId
   );
-  // NOTE: timeStatuses는 이제 List<ParticipantTimeStatus>이며, 각 객체는 date와 impossibleSlots를 가짐.
   const [participantTimeStatuses, setParticipantTimeStatuses] = useState<
     ParticipantTimeStatus[]
   >(initialParticipant?.timeStatuses || []);
@@ -127,6 +118,7 @@ export function MeetingCalendar({
 
         const availableParticipants: string[] = [];
         const unavailableParticipants: string[] = [];
+        const unsetParticipants: string[] = [];
 
         const isCandidate =
           meeting.requirement.isAllDay ||
@@ -139,6 +131,11 @@ export function MeetingCalendar({
 
         if (meeting.participants) {
           meeting.participants.forEach((participant) => {
+            if (participant.status === 'PENDING') {
+              unsetParticipants.push(participant.name);
+              return;
+            }
+
             const ts = participant.timeStatuses?.find(
               (t) => t.date === dateStr
             );
@@ -152,7 +149,12 @@ export function MeetingCalendar({
         }
 
         if (currentParticipant && isCandidate) {
-          if (todayStatus && todayStatus.impossibleSlots?.includes(hour)) {
+          if (currentParticipant.status === 'PENDING') {
+            myStatus = 'UNSET';
+          } else if (
+            todayStatus &&
+            todayStatus.impossibleSlots?.includes(hour)
+          ) {
             myStatus = 'IMPOSSIBLE';
           } else {
             myStatus = 'POSSIBLE';
@@ -250,7 +252,6 @@ export function MeetingCalendar({
   const handleDateClick = (date: Date) => {
     setSelectedDate(date);
     setView('day');
-    // 일별 뷰로 전환 시 해당 날짜의 슬롯을 미리 로드
     setSlots(generateDailySchedule(date));
   };
 
@@ -271,6 +272,15 @@ export function MeetingCalendar({
     time: string,
     currentStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
   ) => {
+    if (readonly) {
+      toast({
+        title: '수정 불가',
+        description: '현재 모임 상태에서는 일정을 수정할 수 없습니다.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!selectedDate || !currentParticipant) return;
 
     const newStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
@@ -338,6 +348,8 @@ export function MeetingCalendar({
     index: number,
     status: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
   ) => {
+    if (readonly) return;
+
     setIsDragging(true);
     setDragStartIdx(index);
     setDragEndIdx(index);
@@ -349,13 +361,17 @@ export function MeetingCalendar({
   };
 
   const handleMouseEnter = (index: number) => {
-    if (isDragging) {
+    if (isDragging && !readonly) {
       setDragEndIdx(index);
     }
   };
 
-  // 드래그 종료 시 슬롯 번호 요청
   const handleMouseUp = async () => {
+    if (readonly) {
+      setIsDragging(false);
+      return;
+    }
+
     if (
       !isDragging ||
       dragStartIdx === null ||
@@ -451,28 +467,22 @@ export function MeetingCalendar({
     }
   };
 
-  const monthDays = Array.from({
-    length: endOfMonth(currentMonth).getDate(),
-  }).map((_, i) => {
-    const date = addDays(startOfMonth(currentMonth), i);
-    const startOfViewWeek = startOfWeek(date, { locale: ko });
-    const startOfCurrentMonth = startOfMonth(currentMonth);
-
-    // If the current day is before the start of the month, add days to the previous week
-    if (date < startOfCurrentMonth) {
-      return addDays(date, 7 - (date.getDay() === 0 ? 7 : date.getDay()));
-    }
-    return date;
-  });
-
   const renderMonthView = () => {
     const y = currentMonth.getFullYear();
     const m = currentMonth.getMonth();
     const grid = buildMonthGrid(y, m);
 
     return (
-      <Card className="flex h-full flex-col overflow-hidden shadow-lg select-none">
-        <div className="flex items-center justify-between bg-gradient-to-r from-primary/10 to-primary/5 p-4">
+      <Card className="flex flex-col overflow-hidden shadow-lg select-none h-full">
+        {readonly && (
+          <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 flex items-center gap-2">
+            <Lock className="h-4 w-4 text-amber-600" />
+            <span className="text-sm text-amber-700 dark:text-amber-300">
+              읽기 전용 모드
+            </span>
+          </div>
+        )}
+        <div className="flex items-center justify-between bg-gradient-to-r from-primary/10 to-primary/5 p-3 shrink-0">
           <Button
             variant="ghost"
             size="icon"
@@ -494,13 +504,13 @@ export function MeetingCalendar({
           </Button>
         </div>
 
-        <div className="flex-1 p-4 overflow-y-auto scrollbar-hide pb-4">
-          <div className="mb-3 grid grid-cols-7 gap-1 text-center">
+        <div className="flex-1 p-2 sm:p-3 flex flex-col">
+          <div className="mb-2 grid grid-cols-7 gap-1 text-center">
             {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
               <div
                 key={day}
                 className={cn(
-                  'text-sm font-bold',
+                  'text-xs sm:text-sm font-bold',
                   idx === 0
                     ? 'text-red-500'
                     : idx === 6
@@ -513,128 +523,59 @@ export function MeetingCalendar({
             ))}
           </div>
 
-          <div className="space-y-1">
+          <div className="flex-1 flex flex-col gap-1">
             {grid.map((week, weekIdx) => (
-              <div key={`week-${weekIdx}`} className="grid grid-cols-7 gap-1">
+              <div
+                key={`week-${weekIdx}`}
+                className="grid grid-cols-7 gap-1 flex-1"
+              >
                 {week.map((date, colIdx) => {
                   if (!date)
-                    return (
-                      <div key={`empty-${colIdx}`} className="min-h-[100px]" />
-                    );
+                    return <div key={`empty-${colIdx}`} className="min-h-0" />;
 
                   const isInRange = isDateInRange(date);
-
-                  if (!isInRange) {
-                    return (
-                      <div
-                        key={date.toString()}
-                        className="min-h-[100px] w-full rounded-lg border border-transparent p-2 opacity-30 bg-muted/20"
-                      >
-                        <span className="text-sm font-semibold text-muted-foreground">
-                          {date.getDate()}
-                        </span>
-                      </div>
-                    );
-                  }
-
+                  const dayNum = date.getDay();
                   const stats = getDailyStats(date);
-                  const isSelected =
-                    selectedDate && isSameDay(date, selectedDate);
-                  const isTodayDate = isToday(date);
-
-                  let bgClass = 'bg-card/50 hover:bg-accent/50';
-                  let borderClass = 'border-transparent';
-
-                  if (stats.isFullyAvailable) {
-                    bgClass = 'bg-green-100 dark:bg-green-900/30';
-                    borderClass = 'border-green-500';
-                  } else if (stats.availableCount > 0) {
-                    const intensity =
-                      stats.availableCount / (stats.totalParticipants || 1);
-                    if (intensity > 0.6) {
-                      bgClass = 'bg-green-50 dark:bg-green-900/10';
-                      borderClass = 'border-green-200 dark:border-green-800';
-                    } else {
-                      bgClass = 'bg-yellow-50 dark:bg-yellow-900/10';
-                      borderClass = 'border-yellow-200 dark:border-yellow-800';
-                    }
-                  }
 
                   return (
                     <button
-                      key={date.toString()}
-                      onClick={() => handleDateClick(date)}
+                      key={date.toISOString()}
+                      onClick={() => isInRange && handleDateClick(date)}
+                      disabled={!isInRange}
                       className={cn(
-                        'relative min-h-[100px] w-full rounded-lg border p-2 text-left transition-all duration-200 flex flex-col justify-between group',
-                        bgClass,
-                        borderClass,
-                        isSelected && 'ring-2 ring-primary ring-offset-1',
-                        isTodayDate && 'bg-primary/5'
+                        'flex flex-col items-center justify-center rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[40px] sm:min-h-[50px]',
+                        isToday(date) && 'ring-2 ring-primary',
+                        isInRange
+                          ? 'hover:bg-primary/20 cursor-pointer'
+                          : 'opacity-40 cursor-not-allowed',
+                        stats.isFullyAvailable && isInRange
+                          ? 'bg-green-100 dark:bg-green-900/30'
+                          : stats.availableCount > 0 && isInRange
+                          ? 'bg-yellow-100 dark:bg-yellow-900/30'
+                          : ''
                       )}
                     >
                       <span
                         className={cn(
-                          'text-sm font-semibold',
-                          isTodayDate ? 'text-primary' : 'text-foreground'
+                          dayNum === 0
+                            ? 'text-red-500'
+                            : dayNum === 6
+                            ? 'text-blue-500'
+                            : ''
                         )}
                       >
                         {date.getDate()}
                       </span>
-
-                      {stats.availableCount > 0 && (
-                        <div className="mt-1 w-full">
-                          <div className="flex items-center gap-1 mb-1">
-                            <div
-                              className={cn(
-                                'h-1.5 w-1.5 rounded-full',
-                                stats.isFullyAvailable
-                                  ? 'bg-green-500'
-                                  : 'bg-yellow-500'
-                              )}
-                            />
-                            <span className="text-[10px] font-medium text-muted-foreground">
-                              {stats.availableCount}/{stats.totalParticipants}
-                            </span>
-                          </div>
-                          <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
-                            <div
-                              className={cn(
-                                'h-full rounded-full',
-                                stats.isFullyAvailable
-                                  ? 'bg-green-500'
-                                  : 'bg-yellow-500'
-                              )}
-                              style={{
-                                width: `${
-                                  (stats.availableCount /
-                                    (stats.totalParticipants || 1)) *
-                                  100
-                                }%`,
-                              }}
-                            />
-                          </div>
-                        </div>
+                      {isInRange && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {stats.availableCount}/{stats.totalParticipants}
+                        </span>
                       )}
                     </button>
                   );
                 })}
               </div>
             ))}
-          </div>
-
-          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground mt-6">
-            <div className="flex items-center gap-1.5">
-              <div className="h-2.5 w-2.5 rounded-full bg-green-500" />
-              <span>모두 가능</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-              <span>일부 가능</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2.5 w-2.5 rounded-full bg-muted border" />
-              <span>불가능/미정</span>
-            </div>
           </div>
         </div>
       </Card>
@@ -643,34 +584,32 @@ export function MeetingCalendar({
 
   const renderDayView = () => {
     if (!selectedDate) return null;
+
     const currentSlots = generateDailySchedule(selectedDate);
 
     return (
-      <Card className="flex h-full flex-col overflow-hidden shadow-lg border-0 sm:border">
-        <div className="flex items-center justify-between border-b p-4 bg-card shrink-0 sticky top-0 z-20">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleBackToMonth}
-              className="gap-1 hover:bg-accent text-foreground"
-            >
-              <ChevronLeft className="h-5 w-5" />
-              <span className="text-lg font-bold">
-                {format(selectedDate, 'M월 d일 (E)', { locale: ko })}
-              </span>
-            </Button>
+      <Card className="flex flex-col overflow-hidden shadow-lg h-full">
+        {readonly && (
+          <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 flex items-center gap-2">
+            <Lock className="h-4 w-4 text-amber-600" />
+            <span className="text-sm text-amber-700 dark:text-amber-300">
+              읽기 전용 모드
+            </span>
           </div>
-          <div className="flex items-center gap-3 text-xs font-medium">
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 bg-emerald-500 rounded-sm" />
-              <span>가능</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3 h-3 bg-rose-400 rounded-sm" />
-              <span>불가능</span>
-            </div>
-          </div>
+        )}
+        <div className="flex items-center justify-between bg-gradient-to-r from-primary/10 to-primary/5 p-3 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleBackToMonth}
+            className="hover:bg-primary/10"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <h2 className="text-lg font-bold text-foreground">
+            {format(selectedDate, 'M월 d일 (E)', { locale: ko })}
+          </h2>
+          <div className="w-10" />
         </div>
 
         <div
@@ -682,7 +621,7 @@ export function MeetingCalendar({
           <div className="relative">
             {/* 시간대 레이블들 - 1시부터 23시까지 */}
             {Array.from({ length: 23 }).map((_, idx) => {
-              const hour = idx + 1; // 1시부터 시작
+              const hour = idx + 1;
               return (
                 <div
                   key={`time-label-${hour}`}
@@ -745,7 +684,9 @@ export function MeetingCalendar({
                     className={cn(
                       'h-14 border-t border-border/30 relative flex items-center transition-colors select-none',
                       slot.isCandidate
-                        ? 'cursor-pointer hover:opacity-90'
+                        ? readonly
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer hover:opacity-90'
                         : 'bg-muted/10 cursor-not-allowed opacity-50',
                       isDragging &&
                         dragStartIdx !== null &&
@@ -760,17 +701,17 @@ export function MeetingCalendar({
                     {/* 가능 영역 */}
                     {slot.isCandidate && slot.availableCount > 0 && (
                       <div
-                        className="absolute left-0 top-0 bottom-0 bg-teal-50 dark:bg-teal-900/40 transition-all duration-300 flex items-center justify-start px-3"
+                        className="absolute left-0 top-0 bottom-0 bg-teal-50 dark:bg-teal-900/40 transition-all duration-300 flex items-center justify-start px-2 sm:px-3 overflow-hidden"
                         style={{ width: `${availableRatio * 100}%` }}
                       >
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-teal-700 dark:text-teal-300">
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-xs font-bold text-teal-700 dark:text-teal-300 whitespace-nowrap">
                             {slot.availableCount}명 가능
                           </span>
                           {slotWithParticipants.availableParticipants &&
                             slotWithParticipants.availableParticipants.length >
                               0 && (
-                              <span className="text-[10px] text-teal-600 dark:text-teal-400">
+                              <span className="text-[10px] text-teal-600 dark:text-teal-400 truncate max-w-full">
                                 {slotWithParticipants.availableParticipants.join(
                                   ', '
                                 )}
@@ -780,25 +721,25 @@ export function MeetingCalendar({
                       </div>
                     )}
 
-                    {/* 불가능 영역 */}
                     {slot.isCandidate &&
                       slot.totalParticipants - slot.availableCount > 0 && (
                         <div
-                          className="absolute top-0 bottom-0 bg-pink-50 dark:bg-pink-900/30 transition-all duration-300 flex items-center justify-start px-3 pr-24"
+                          className="absolute top-0 bottom-0 bg-pink-50 dark:bg-pink-900/30 transition-all duration-300 flex items-center justify-start px-2 sm:px-3 overflow-hidden"
                           style={{
                             right: 0,
                             width: `${unavailableRatio * 100}%`,
+                            paddingRight: '80px',
                           }}
                         >
-                          <div className="flex flex-col items-start">
-                            <span className="text-xs font-bold text-pink-700 dark:text-pink-300">
+                          <div className="flex flex-col items-start min-w-0">
+                            <span className="text-xs font-bold text-pink-700 dark:text-pink-300 whitespace-nowrap">
                               {slot.totalParticipants - slot.availableCount}명
                               불가
                             </span>
                             {slotWithParticipants.unavailableParticipants &&
                               slotWithParticipants.unavailableParticipants
                                 .length > 0 && (
-                                <span className="text-[10px] text-pink-600 dark:text-pink-400">
+                                <span className="text-[10px] text-pink-600 dark:text-pink-400 truncate max-w-full">
                                   {slotWithParticipants.unavailableParticipants.join(
                                     ', '
                                   )}
@@ -808,18 +749,21 @@ export function MeetingCalendar({
                         </div>
                       )}
 
-                    {/* 내 참여 상태 뱃지 */}
                     <div className="absolute right-2 flex items-center gap-2 z-10 pointer-events-none">
                       {isAvailable && (
                         <div className="flex items-center gap-1 text-teal-700 dark:text-teal-300 bg-teal-100/95 dark:bg-teal-900/80 px-2 py-1 rounded-full shadow-sm">
-                          <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                          <span className="text-xs font-bold">참여 가능</span>
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="text-xs font-bold hidden sm:inline">
+                            참여 가능
+                          </span>
                         </div>
                       )}
                       {isUnavailable && (
                         <div className="flex items-center gap-1 text-rose-700 bg-rose-100/95 dark:bg-rose-900/80 px-2 py-1 rounded-full shadow-sm">
-                          <div className="w-2 h-2 rounded-full bg-rose-500" />
-                          <span className="text-xs font-bold">참여 불가</span>
+                          <div className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                          <span className="text-xs font-bold hidden sm:inline">
+                            참여 불가
+                          </span>
                         </div>
                       )}
                     </div>

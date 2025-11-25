@@ -8,7 +8,6 @@ export type MeetingRequirementDto = {
   dateRangeEnd: string; // "yyyy-MM-dd"
   isAllDay: boolean;
   timeConstraints: TimeRangeDto[];
-  // ✨ reflectTimetable, reflectCalendar는 제거
 };
 
 // FriendDto: 공통 사용
@@ -23,8 +22,8 @@ export type MeetingCreateRequest = {
   name: string;
   invitedUserIds: string[];
   requirement: MeetingRequirementDto;
-  defaultReflectTimetable: boolean; // 생성자 참여자용
-  defaultReflectCalendar: boolean; // 생성자 참여자용
+  defaultReflectTimetable: boolean;
+  defaultReflectCalendar: boolean;
 };
 
 export type AvailableSlot = {
@@ -70,8 +69,6 @@ export type MeetingUpdateRequest = {
     dateRangeEnd: string;
     isAllDay: boolean;
     timeConstraints: TimeRangeDto[];
-    // ✨ reflectTimetable, reflectCalendar도 삭제하고
-    // 호스트/참여자별 설정은 updateParticipantSettings로 관리
   };
 };
 
@@ -85,9 +82,11 @@ export type MeetingParticipant = {
   name: string;
   status: 'ACCEPTED' | 'PENDING' | 'DECLINED';
   timeStatuses: ParticipantTimeStatus[];
-  reflectTimetable: boolean; // 개인 시간표 반영
-  reflectCalendar: boolean; // 개인 캘린더 반영
+  reflectTimetable: boolean;
+  reflectCalendar: boolean;
 };
+
+export type MeetingStatus = 'PENDING' | 'CONFIRMED' | 'CLOSED';
 
 export type Meeting = {
   id: string;
@@ -97,7 +96,13 @@ export type Meeting = {
   requirement: MeetingRequirementDto;
   confirmedStart?: string;
   confirmedEnd?: string;
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'OPEN';
+  status: MeetingStatus;
   createdAt: string;
   participants?: MeetingParticipant[];
+};
+
+export type MeetingStatusUpdateRequest = {
+  status: MeetingStatus;
+  confirmedStart?: string; // 확정 시 최종 시작 시간 (ISO 8601)
+  confirmedEnd?: string; // 확정 시 최종 종료 시간 (ISO 8601)
 };

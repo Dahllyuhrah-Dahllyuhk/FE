@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Calendar } from '@/components/calendar';
 import { EventDialog } from '@/components/event-dialog';
@@ -35,13 +35,12 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [colorMap, setColorMap] = useState<Map<string, string>>(new Map());
 
-  // 📌 [제거] 낙관적 UI에서는 'isSubmitting' state가 필요 없습니다.
-  // const [isSubmitting, setIsSubmitting] = useState(false);
-
   const isMobile = useIsMobile();
 
   // 🔥 전역 refresh 트리거
-  const { trigger, refresh } = useEventRefresh();
+  const { trigger } = useEventRefresh();
+
+  const initialLoadDoneRef = useRef(false);
 
   // 서버 응답 → 화면용 이벤트로 변환
   const mapRaw = (list: RawCalendarEvent[]): Event[] =>
@@ -63,10 +62,9 @@ export default function HomePage() {
         (a: Event, b: Event) => a.startDate.getTime() - b.startDate.getTime()
       );
 
-  // ✅ trigger가 바뀔 때마다 전체 이벤트 다시 로딩
+  // ✅ trigger가 바뀔 때마다 전체 이벤트 다시 로딩 (초기 로드 또는 강제 새로고침)
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       try {
         setIsLoading(true);
@@ -74,6 +72,7 @@ export default function HomePage() {
         const raw = await fetchAllCalendarEvents();
         if (cancelled) return;
         setEvents(mapRaw(raw as RawCalendarEvent[]));
+        initialLoadDoneRef.current = true;
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.message ?? '데이터를 불러올 수 없습니다');
@@ -89,23 +88,20 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
-  // ✅ SSE 구독: BE(Webhook/증분 동기화) → FE 실시간 반영
   useEffect(() => {
     const sseUrl = `${API_BASE}/api/sse/events`;
     const es = new EventSource(sseUrl);
 
-    es.addEventListener('events-updated', () => {
-      refresh();
-    });
-
+    // SSE는 에러 감지만 - 성공적인 업데이트는 낙관적 UI로 처리
     es.onerror = () => {
+      console.warn('[v0] SSE 연결 끊김 - 캘린더 갱신 필요');
       es.close();
     };
 
     return () => {
       es.close();
     };
-  }, [refresh]);
+  }, []);
 
   // =============================
   // 캘린더 인터랙션 핸들러들
@@ -148,15 +144,14 @@ export default function HomePage() {
   };
 
   // =============================
-  // 저장 / 삭제 (📌 [수정] 낙관적 UI 로직으로 전체 교체)
+  // 저장 / 삭제 (낙관적 UI 로직)
   // =============================
 
   const handleSaveEvent = async (event: Event) => {
-    // 1. (즉각 반응) 대화상자를 즉시 닫음
     setIsDialogOpen(false);
     setIsEditMode(false);
 
-    // 2. (즉각 반응) API 요청에 필요한 payload 미리 준비
+    // API 요청에 필요한 payload 미리 준비
     const formatToISO = (
       date: Date,
       allDay: boolean,
@@ -186,95 +181,76 @@ export default function HomePage() {
       color: event.color,
     };
 
-    // 3. (즉각 반응) 임시 ID 및 가짜 이벤트 생성
-    // (selectedEvent가 있으면 '수정', 없으면 '생성')
+    // 임시 ID 및 가짜 이벤트 생성
     const tempId = selectedEvent ? selectedEvent.id : `temp-${Date.now()}`;
     const optimisticEvent: Event = { ...event, id: tempId };
 
-    // 4. (즉각 반응) UI에 낙관적 결과 선반영
+    const previousEvents = [...events];
+
     setError(null);
     if (selectedEvent) {
-      // (수정)
       setEvents((prev) =>
         prev.map((e) => (e.id === tempId ? optimisticEvent : e))
       );
     } else {
-      // (생성)
       setEvents((prev) => [...prev, optimisticEvent]);
     }
 
-    // 5. (백그라운드) API 호출 시작
+    // 백그라운드에서 API 호출 진행
     try {
       if (selectedEvent) {
-        // (수정)
         const realEvent = await updateCalendarEvent(tempId, requestPayload);
-        // (성공) UI의 이벤트를 '진짜' 이벤트로 교체 (mapRaw 사용)
+        // 서버 응답으로 ID나 다른 속성이 변경되었을 수 있으므로 업데이트
         setEvents((prev) =>
           prev.map((e) => (e.id === tempId ? mapRaw([realEvent])[0] : e))
         );
-        // 색상 맵 업데이트
         setColorMap((prev) =>
           new Map(prev).set(realEvent.id, realEvent.color || '')
         );
       } else {
-        // (생성)
         const realEvent = await createCalendarEvent(requestPayload);
-        // (성공) UI의 '임시' 이벤트를 '진짜' 이벤트(Google ID)로 교체
+        // 임시 ID를 실제 서버 ID로 교체
         setEvents((prev) =>
           prev.map((e) => (e.id === tempId ? mapRaw([realEvent])[0] : e))
         );
-        // 색상 맵 업데이트
         setColorMap((prev) =>
           new Map(prev).set(realEvent.id, realEvent.color || '')
         );
       }
     } catch (err: any) {
-      // 6. (실패) API 실패 시
+      console.error('[v0] 이벤트 저장 실패:', err);
       setError(err?.message ?? '일정 저장 중 오류가 발생했습니다');
-      // (실패) UI에 반영했던 '낙관적' 결과 되돌리기
-      if (selectedEvent) {
-        // (수정 실패) -> 간단하게 전체 목록을 다시 불러와 복구
-        refresh();
-      } else {
-        // (생성 실패) -> UI에서 임시 이벤트 제거
-        setEvents((prev) => prev.filter((e) => e.id !== tempId));
-      }
+      setEvents(previousEvents);
     } finally {
-      // (정리)
       setSelectedEvent(null);
       setSelectedDateRange(null);
     }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    // 1. (즉각 반응) 삭제할 이벤트를 UI에서 미리 제거
     const eventToDelete = events.find((e) => e.id === eventId);
-    if (!eventToDelete) return; // 이미 없으면 무시
+    if (!eventToDelete) return;
+
+    const previousEvents = [...events];
 
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
-
-    // (즉각 반응) 모달 닫기
     setIsDetailModalOpen(false);
     setIsDialogOpen(false);
     setSelectedEvent(null);
     setError(null);
 
-    // 2. (백그라운드) API 호출
     try {
       await deleteCalendarEvent(eventId);
-      // (성공) -> UI는 이미 반영됨. 색상 캐시만 제거.
       setColorMap((prev) => {
         const next = new Map(prev);
         next.delete(eventId);
         return next;
       });
     } catch (err: any) {
-      // 3. (실패) API 실패 시
+      console.error('[v0] 이벤트 삭제 실패:', err);
       setError(err?.message ?? '삭제 중 오류가 발생했습니다');
-      // (실패) UI 되돌리기: 삭제했던 이벤트를 다시 추가
-      setEvents((prev) => [...prev, eventToDelete]);
+      setEvents(previousEvents);
     }
-    // 🚨 삭제 후 refresh()는 더 이상 필요 없음
   };
 
   // =============================
@@ -336,8 +312,6 @@ export default function HomePage() {
           event={selectedEvent}
           onDelete={handleDeleteEvent}
           onEdit={handleEditEvent}
-          // 📌 [제거] isSubmitting prop 제거
-          // isSubmitting={isSubmitting}
         />
 
         <EventDialog
@@ -347,8 +321,6 @@ export default function HomePage() {
           dateRange={isEditMode ? selectedDateRange : null}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
-          // 📌 [제거] isSubmitting prop 제거
-          // isSubmitting={isSubmitting}
         />
 
         <BottomNav />
