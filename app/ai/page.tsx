@@ -48,7 +48,7 @@ interface IWindow extends Window {
 }
 
 // --- Sub Components (카드 UI) ---
-
+const BE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';
 // 1. 일정(Schedule) 카드
 const ScheduleCard = ({ data }: { data: any }) => {
   const router = useRouter();
