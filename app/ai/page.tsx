@@ -314,7 +314,7 @@ export default function AIPage() {
     setIsTyping(true);
 
     try {
-      const response = await fetch(`${API_BASE}/api/ai/call`, {
+      const response = await fetch(`/api/ai/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
