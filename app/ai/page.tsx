@@ -51,7 +51,7 @@ const BE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';
 
 // --- Sub Components (카드 UI) ---
 
-// 1. 일정(Schedule) 카드
+// 1. 일정(Schedule) 카드 (날짜 오류 방지 추가됨)
 const ScheduleCard = ({ data }: { data: any }) => {
   const router = useRouter();
   const events = Array.isArray(data) ? data : [data];
@@ -61,8 +61,16 @@ const ScheduleCard = ({ data }: { data: any }) => {
   return (
     <div className="flex flex-col gap-2 w-full max-w-[280px] sm:max-w-sm mt-1">
       {events.map((evt: any, idx: number) => {
-        const startDate = new Date(evt.start || evt.startTimestamp);
-        const endDate = new Date(evt.end || evt.endTimestamp);
+        // 날짜 데이터 추출 및 유효성 검사
+        const startVal = evt.start || evt.startTimestamp;
+        const endVal = evt.end || evt.endTimestamp;
+        
+        const startDate = startVal ? new Date(startVal) : null;
+        const endDate = endVal ? new Date(endVal) : null;
+        
+        // 날짜가 유효하지 않으면(Invalid Date) 렌더링하지 않음
+        if (!startDate || isNaN(startDate.getTime())) return null;
+        
         const isAllDay = evt.allDay;
 
         return (
@@ -83,7 +91,9 @@ const ScheduleCard = ({ data }: { data: any }) => {
                   <CalendarIcon className="w-3 h-3 shrink-0" />
                   <span>
                     {format(startDate, 'M월 d일 (E)', { locale: ko })}
-                    {!isAllDay && ` ${format(startDate, 'HH:mm')} ~ ${format(endDate, 'HH:mm')}`}
+                    {!isAllDay && endDate && !isNaN(endDate.getTime()) && 
+                      ` ${format(startDate, 'HH:mm')} ~ ${format(endDate, 'HH:mm')}`
+                    }
                   </span>
                 </div>
                 {evt.location && (
@@ -101,7 +111,7 @@ const ScheduleCard = ({ data }: { data: any }) => {
   );
 };
 
-// 2. 모임(Meeting) 카드
+// 2. 모임(Meeting) 카드 (날짜 오류 방지 추가됨)
 const MeetingCard = ({ data }: { data: any }) => {
   const router = useRouter();
   const meetings = Array.isArray(data) ? data : [data];
@@ -112,14 +122,18 @@ const MeetingCard = ({ data }: { data: any }) => {
     <div className="flex flex-col gap-2 w-full max-w-[280px] sm:max-w-sm mt-1">
       {meetings.map((meeting: any, idx: number) => {
         const req = meeting.requirement || {};
-        const startStr = req.dateRangeStart;
-        const endStr = req.dateRangeEnd;
+        const startStr = req.dateRangeStart || '미정';
+        const endStr = req.dateRangeEnd || '미정';
         
         const statusLabels: Record<string, string> = {
           PENDING: '조율 중',
           CONFIRMED: '확정됨',
           CLOSED: '종료됨'
         };
+
+        // 확정 날짜 유효성 검사
+        const confirmedDate = meeting.confirmedStart ? new Date(meeting.confirmedStart) : null;
+        const isValidConfirmed = confirmedDate && !isNaN(confirmedDate.getTime());
 
         return (
           <Card 
@@ -144,10 +158,10 @@ const MeetingCard = ({ data }: { data: any }) => {
                   <span>{startStr} ~ {endStr}</span>
                 </div>
                 
-                {meeting.confirmedStart ? (
+                {isValidConfirmed ? (
                    <div className="flex items-center gap-1.5 text-green-600 font-medium">
                      <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                     <span>확정: {format(new Date(meeting.confirmedStart), 'M/d HH:mm')}</span>
+                     <span>확정: {format(confirmedDate!, 'M/d HH:mm')}</span>
                    </div>
                 ) : (
                   <div className="flex items-center gap-1.5">
@@ -239,13 +253,7 @@ export default function AIPage() {
         recognition.onend = () => setIsListening(false);
         recognitionRef.current = recognition;
       } else {
-        // 미지원 브라우저 안내
-        toast({
-            title: "브라우저 호환성 안내",
-            description: "음성 인식을 지원하지 않는 브라우저입니다. Chrome 사용을 권장합니다.",
-            variant: "destructive",
-            duration: 5000,
-        });
+        // 미지원 브라우저 안내 (토스트 제거됨 - 선택사항)
       }
     }
   }, []);
@@ -335,8 +343,7 @@ export default function AIPage() {
         timestamp: new Date(),
       };
 
-      // 🔥 [핵심] TTS는 오직 aiMessage.content만 읽습니다.
-      // 카드는 aiMessage.aiData에 저장되어 TTS에 영향 주지 않음.
+      // 🔥 TTS는 오직 aiMessage.content만 읽습니다.
       if (result.category && result.data) {
         aiMessage.aiData = {
           category: result.category,
@@ -375,7 +382,7 @@ export default function AIPage() {
     return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // --- 말풍선과 카드를 분리해서 렌더링 ---
+  // --- 렌더러 함수 (말풍선 분리 로직) ---
   const renderAIMessage = (msg: Message) => {
     const hasData = msg.aiData && msg.aiData.data;
     const { category, data } = msg.aiData || {};
@@ -445,7 +452,7 @@ export default function AIPage() {
 
                   {message.role === 'user' ? (
                     <div className="flex flex-col gap-1 max-w-[85%] items-end">
-                      <div className="p-3 rounded-2xl bg-primary text-primary-foreground rounded-tr-none text-sm leading-relaxed">
+                      <div className="p-3 rounded-2xl bg-primary text-primary-foreground rounded-tr-none text-sm leading-relaxed whitespace-pre-wrap">
                         {message.content}
                       </div>
                       <span className="text-[10px] text-muted-foreground px-1">
