@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 
 interface TimeRangeSelectorProps {
@@ -20,9 +20,19 @@ export function TimeRangeSelector({
   const [dragStartIdx, setDragStartIdx] = useState<number | null>(null);
   const [dragEndIdx, setDragEndIdx] = useState<number | null>(null);
   const [dragTargetSelected, setDragTargetSelected] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const slotHeight = 48;
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const formatHour = (hour: number): string => {
     return `${hour.toString().padStart(2, '0')}:00`;
@@ -30,7 +40,7 @@ export function TimeRangeSelector({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, hour: number) => {
-      if (disabled) return;
+      if (disabled || isMobile) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -40,12 +50,12 @@ export function TimeRangeSelector({
       setDragTargetSelected(!selectedSlots.includes(hour));
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
-    [disabled, selectedSlots]
+    [disabled, selectedSlots, isMobile]
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging || !containerRef.current) return;
+      if (!isDragging || !containerRef.current || isMobile) return;
       e.preventDefault();
 
       const rect = containerRef.current.getBoundingClientRect();
@@ -53,12 +63,17 @@ export function TimeRangeSelector({
       const hour = Math.max(0, Math.min(23, Math.floor(y / slotHeight)));
       setDragEndIdx(hour);
     },
-    [isDragging, slotHeight]
+    [isDragging, slotHeight, isMobile]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging || dragStartIdx === null || dragEndIdx === null) {
+      if (
+        !isDragging ||
+        dragStartIdx === null ||
+        dragEndIdx === null ||
+        isMobile
+      ) {
         setIsDragging(false);
         return;
       }
@@ -89,14 +104,35 @@ export function TimeRangeSelector({
       dragTargetSelected,
       selectedSlots,
       onSlotsChange,
+      isMobile,
     ]
+  );
+
+  const handleSlotClick = useCallback(
+    (hour: number) => {
+      if (disabled) return;
+
+      const newSlots = new Set(selectedSlots);
+      if (newSlots.has(hour)) {
+        newSlots.delete(hour);
+      } else {
+        newSlots.add(hour);
+      }
+      onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
+    },
+    [disabled, selectedSlots, onSlotsChange]
   );
 
   // 드래그 중 하이라이트 계산
   const getSlotState = (
     hour: number
   ): 'selected' | 'unselected' | 'drag-select' | 'drag-deselect' => {
-    if (isDragging && dragStartIdx !== null && dragEndIdx !== null) {
+    if (
+      isDragging &&
+      dragStartIdx !== null &&
+      dragEndIdx !== null &&
+      !isMobile
+    ) {
       const start = Math.min(dragStartIdx, dragEndIdx);
       const end = Math.max(dragStartIdx, dragEndIdx);
       if (hour >= start && hour <= end) {
@@ -136,6 +172,13 @@ export function TimeRangeSelector({
 
   return (
     <div className="relative w-full">
+      {isMobile && (
+        <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+          <p className="text-xs text-blue-700 dark:text-blue-300">
+            모바일에서는 각 시간대를 탭하여 선택/해제할 수 있습니다.
+          </p>
+        </div>
+      )}
       <div
         ref={containerRef}
         className={cn(
@@ -185,6 +228,7 @@ export function TimeRangeSelector({
                   height: `${slotHeight}px`,
                 }}
                 onPointerDown={(e) => handlePointerDown(e, hour)}
+                onClick={() => isMobile && handleSlotClick(hour)}
               >
                 {isSelected && (
                   <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">

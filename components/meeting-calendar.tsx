@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { format, isToday, addMonths, subMonths } from 'date-fns';
+import { format, isToday, addMonths, subMonths, subDays } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import type {
 import { toast } from '@/hooks/use-toast';
 import { buildMonthGrid } from '@/lib/helpers';
 
-// 헬퍼 함수: time 문자열 ("HH:00")을 슬롯 번호(0~23)로 변환
+// 헬퍼 함수: time 문자열 ("HH:00")을 슬롯 번호(0~23)로 변환 (현재는 미사용이지만 남겨둠)
 const getSlotNumberFromTime = (time: string): number => {
   const [hour] = time.split(':').map(Number);
   return hour;
@@ -33,6 +33,34 @@ interface MeetingCalendarProps {
   currentUserId?: string;
   readonly?: boolean;
 }
+
+// KST(+9) 기준으로 UTC 날짜가 바뀌는 경계 (0~8 / 9~23 구분)
+const TIMEZONE_OFFSET_HOURS = 9;
+
+/**
+ * 선택된 슬롯(slots)을 기준으로,
+ * - 슬롯 전체가 0~8이거나, 9~23에만 있으면 → 1개의 payload
+ * - 0~8, 9~23을 모두 포함하면 → 전날/당일 기준으로 2개의 payload
+ *   (슬롯 인덱스는 그대로, 날짜만 분리)
+ */
+// 항상 선택한 날짜에 대해 하나의 payload만 생성
+const buildPatchPayloadForSlots = (
+  selectedDate: Date,
+  slots: number[],
+  status: 'POSSIBLE' | 'IMPOSSIBLE'
+): AvailabilitySlotUpdatePayload[] => {
+  if (slots.length === 0) return [];
+
+  const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+  return [
+    {
+      date: dateStr,
+      slots: Array.from(new Set(slots)).sort((a, b) => a - b),
+      status,
+    },
+  ];
+};
 
 export function MeetingCalendar({
   meeting,
@@ -55,7 +83,6 @@ export function MeetingCalendar({
 
   const [slots, setSlots] = useState<TimeSlotAvailability[]>([]);
 
-  const [isSelecting, setIsSelecting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartIdx, setDragStartIdx] = useState<number | null>(null);
   const [dragEndIdx, setDragEndIdx] = useState<number | null>(null);
@@ -64,33 +91,6 @@ export function MeetingCalendar({
   >(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const stateRef = useRef({
-    isDragging,
-    dragStartIdx,
-    dragEndIdx,
-    dragTargetStatus,
-    selectedDate,
-    participantTimeStatuses,
-  });
-
-  useEffect(() => {
-    stateRef.current = {
-      isDragging,
-      dragStartIdx,
-      dragEndIdx,
-      dragTargetStatus,
-      selectedDate,
-      participantTimeStatuses,
-    };
-  }, [
-    isDragging,
-    dragStartIdx,
-    dragEndIdx,
-    dragTargetStatus,
-    selectedDate,
-    participantTimeStatuses,
-  ]);
 
   const currentParticipant = meeting.participants?.find(
     (p) => p.userId === currentUserId
@@ -108,10 +108,6 @@ export function MeetingCalendar({
 
       for (let hour = 0; hour < 24; hour++) {
         const time = `${hour.toString().padStart(2, '0')}:00`;
-        const slotStart = new Date(date);
-        slotStart.setHours(hour, 0, 0, 0);
-        const slotEnd = new Date(date);
-        slotEnd.setHours(hour + 1, 0, 0, 0);
 
         let availableCount = 0;
         let myStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET' = 'UNSET';
@@ -214,35 +210,63 @@ export function MeetingCalendar({
     }
   }, [view]);
 
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      if (isDragging) {
-        handleMouseUp();
-      }
-    };
-    window.addEventListener('mouseup', handleGlobalMouseUp);
-    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
-  }, [isDragging]);
-
   const getDailyStats = (date: Date) => {
     const dateKey = format(date, 'yyyy-MM-dd');
-    const stat = dailyStats[dateKey];
+    const totalCount =
+      meeting.participants?.length || meeting.invitedUserIds?.length || 0;
 
-    if (!stat) {
+    if (!meeting.participants || meeting.participants.length === 0) {
       return {
         availableCount: 0,
-        totalParticipants:
-          meeting.participants?.length || meeting.invitedUserIds?.length || 0,
+        totalParticipants: totalCount,
         isFullyAvailable: false,
       };
     }
 
+    // 후보 시간대 계산
+    const candidateHours: number[] = [];
+    if (
+      meeting.requirement.isAllDay ||
+      meeting.requirement.timeConstraints.length === 0
+    ) {
+      for (let h = 0; h < 24; h++) candidateHours.push(h);
+    } else {
+      meeting.requirement.timeConstraints.forEach((tc) => {
+        const [startHour] = tc.startTime.split(':').map(Number);
+        const [endHour] = tc.endTime.split(':').map(Number);
+        for (let h = startHour; h < endHour; h++) {
+          if (!candidateHours.includes(h)) candidateHours.push(h);
+        }
+      });
+    }
+
+    let availableCount = 0;
+    meeting.participants.forEach((participant) => {
+      if (participant.status === 'PENDING') {
+        return;
+      }
+
+      const ts = participant.timeStatuses?.find((t) => t.date === dateKey);
+      const impossibleSlots = ts?.impossibleSlots || [];
+
+      const hasAvailableSlot = candidateHours.some(
+        (hour) => !impossibleSlots.includes(hour)
+      );
+
+      if (hasAvailableSlot) {
+        availableCount++;
+      }
+    });
+
+    const pendingCount = meeting.participants.filter(
+      (p) => p.status === 'PENDING'
+    ).length;
+
     return {
-      availableCount: stat.availableParticipants,
-      totalParticipants: stat.totalParticipants,
+      availableCount,
+      totalParticipants: totalCount,
       isFullyAvailable:
-        stat.availableParticipants === stat.totalParticipants &&
-        stat.totalParticipants > 0,
+        availableCount === totalCount && totalCount > 0 && pendingCount === 0,
     };
   };
 
@@ -258,6 +282,7 @@ export function MeetingCalendar({
   const handleBackToMonth = () => {
     setView('month');
     setSelectedDate(null);
+    loadDailyAvailability();
   };
 
   const isDateInRange = (date: Date) => {
@@ -268,82 +293,7 @@ export function MeetingCalendar({
     return date >= start && date <= end;
   };
 
-  const handleSlotToggle = async (
-    time: string,
-    currentStatus: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
-  ) => {
-    if (readonly) {
-      toast({
-        title: '수정 불가',
-        description: '현재 모임 상태에서는 일정을 수정할 수 없습니다.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!selectedDate || !currentParticipant) return;
-
-    const newStatus: 'POSSIBLE' | 'IMPOSSIBLE' =
-      currentStatus === 'POSSIBLE' ? 'IMPOSSIBLE' : 'POSSIBLE';
-
-    const [hour] = time.split(':').map(Number);
-    const dateStr = format(selectedDate, 'yyyy-MM-dd');
-
-    const payload: AvailabilitySlotUpdatePayload[] = [
-      {
-        date: dateStr,
-        slots: [hour],
-        status: newStatus,
-      },
-    ];
-
-    try {
-      await patchParticipantAvailability(meeting.id, payload);
-
-      const updatedParticipant = { ...currentParticipant };
-      const statusIndex = updatedParticipant.timeStatuses?.findIndex(
-        (ts) => ts.date === dateStr
-      );
-
-      if (statusIndex !== undefined && statusIndex >= 0) {
-        const existingStatus =
-          updatedParticipant.timeStatuses![statusIndex].impossibleSlots || [];
-        if (newStatus === 'IMPOSSIBLE') {
-          updatedParticipant.timeStatuses![statusIndex].impossibleSlots = [
-            ...existingStatus,
-            hour,
-          ];
-        } else {
-          updatedParticipant.timeStatuses![statusIndex].impossibleSlots =
-            existingStatus.filter((s) => s !== hour);
-        }
-      } else {
-        if (!updatedParticipant.timeStatuses)
-          updatedParticipant.timeStatuses = [];
-        updatedParticipant.timeStatuses.push({
-          date: dateStr,
-          impossibleSlots: newStatus === 'IMPOSSIBLE' ? [hour] : [],
-          status: 'IMPOSSIBLE',
-        });
-      }
-
-      setSlots((prevSlots) =>
-        prevSlots.map((s) =>
-          s.time === time ? { ...s, myStatus: newStatus } : s
-        )
-      );
-
-      await loadDailyAvailability();
-    } catch (error) {
-      console.error('Failed to update availability', error);
-      toast({
-        title: '업데이트 실패',
-        description: '일정을 업데이트하지 못했습니다.',
-        variant: 'destructive',
-      });
-    }
-  };
-
+  // 클릭/드래그 공통 시작점: 클릭도 "길이 1짜리 드래그"로 취급
   const handleMouseDown = (
     index: number,
     status: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET'
@@ -385,33 +335,40 @@ export function MeetingCalendar({
     }
 
     const start = Math.min(dragStartIdx, dragEndIdx);
-    const end = Math.max(dragEndIdx, dragStartIdx);
+    const end = Math.max(dragStartIdx, dragEndIdx);
+
+    const currentSlots = generateDailySchedule(selectedDate);
     const selectedSlots: number[] = [];
 
     for (let i = start; i <= end; i++) {
-      if (slots[i]?.isCandidate) {
-        const [hour] = slots[i].time.split(':').map(Number);
+      if (currentSlots[i]?.isCandidate) {
+        const [hour] = currentSlots[i].time.split(':').map(Number);
         selectedSlots.push(hour);
       }
     }
 
     if (selectedSlots.length === 0) {
       setIsDragging(false);
+      setDragStartIdx(null);
+      setDragEndIdx(null);
+      setDragTargetStatus(null);
       return;
     }
 
-    const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const payload: AvailabilitySlotUpdatePayload[] = [
-      {
-        date: dateStr,
-        slots: selectedSlots,
-        status: dragTargetStatus,
-      },
-    ];
+    // UTC 경계 기준으로 payload 분리
+    const payloads = buildPatchPayloadForSlots(
+      selectedDate,
+      selectedSlots,
+      dragTargetStatus
+    );
 
     try {
-      await patchParticipantAvailability(meeting.id, payload);
+      // 분리된 payload 각각 PATCH
+      for (const payload of payloads) {
+        await patchParticipantAvailability(meeting.id, [payload]);
+      }
 
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
       const updatedParticipant = { ...currentParticipant };
       const statusIndex = updatedParticipant.timeStatuses?.findIndex(
         (ts) => ts.date === dateStr
@@ -543,7 +500,7 @@ export function MeetingCalendar({
                       onClick={() => isInRange && handleDateClick(date)}
                       disabled={!isInRange}
                       className={cn(
-                        'flex flex-col items-center justify-center rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[40px] sm:min-h-[50px]',
+                        'flex flex-col items-center justify-center rounded-lg text-xs sm:text-sm font-medium transition-all min-h-[52px] sm:min-h-[64px]',
                         isToday(date) && 'ring-2 ring-primary',
                         isInRange
                           ? 'hover:bg-primary/20 cursor-pointer'
@@ -552,11 +509,14 @@ export function MeetingCalendar({
                           ? 'bg-green-100 dark:bg-green-900/30'
                           : stats.availableCount > 0 && isInRange
                           ? 'bg-yellow-100 dark:bg-yellow-900/30'
+                          : isInRange
+                          ? 'bg-gray-300/80 dark:bg-gray-600/80'
                           : ''
                       )}
                     >
                       <span
                         className={cn(
+                          'font-semibold',
                           dayNum === 0
                             ? 'text-red-500'
                             : dayNum === 6
@@ -567,7 +527,7 @@ export function MeetingCalendar({
                         {date.getDate()}
                       </span>
                       {isInRange && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[10px] font-medium text-muted-foreground">
                           {stats.availableCount}/{stats.totalParticipants}
                         </span>
                       )}
@@ -576,6 +536,21 @@ export function MeetingCalendar({
                 })}
               </div>
             ))}
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-border/50 flex flex-wrap gap-3 justify-center text-xs">
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded bg-green-100 dark:bg-green-900/30 border border-green-500" />
+              <span className="text-muted-foreground">전원 가능</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-500" />
+              <span className="text-muted-foreground">일부 가능</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-4 h-4 rounded bg-gray-300/80 dark:bg-gray-600/80 border border-gray-500" />
+              <span className="text-muted-foreground">가능 인원 없음</span>
+            </div>
           </div>
         </div>
       </Card>
@@ -619,7 +594,7 @@ export function MeetingCalendar({
           onMouseLeave={handleMouseUp}
         >
           <div className="relative">
-            {/* 시간대 레이블들 - 1시부터 23시까지 */}
+            {/* 시간대 레이블들 - 1시부터 23시까지 (B 스타일 레이아웃) */}
             {Array.from({ length: 23 }).map((_, idx) => {
               const hour = idx + 1;
               return (
@@ -648,7 +623,7 @@ export function MeetingCalendar({
                   dragTargetStatus
                 ) {
                   const start = Math.min(dragStartIdx, dragEndIdx);
-                  const end = Math.max(dragEndIdx, dragStartIdx);
+                  const end = Math.max(dragStartIdx, dragEndIdx);
                   if (index >= start && index <= end && slot.isCandidate) {
                     isAvailable = dragTargetStatus === 'POSSIBLE';
                     isUnavailable = dragTargetStatus === 'IMPOSSIBLE';
@@ -666,6 +641,9 @@ export function MeetingCalendar({
                     : 0;
                 const unavailableRatio = 1 - availableRatio;
 
+                const unavailableCount =
+                  slot.totalParticipants - slot.availableCount;
+
                 return (
                   <div
                     key={index}
@@ -676,11 +654,10 @@ export function MeetingCalendar({
                       }
                     }}
                     onMouseEnter={() => handleMouseEnter(index)}
-                    onClick={() =>
-                      !isDragging &&
-                      slot.isCandidate &&
-                      handleSlotToggle(slot.time, slot.myStatus)
-                    }
+                    // 클릭은 드래그로만 처리하므로, onClick에서는 동작 안 함
+                    onClick={(e) => {
+                      e.preventDefault();
+                    }}
                     className={cn(
                       'h-14 border-t border-border/30 relative flex items-center transition-colors select-none',
                       slot.isCandidate
@@ -692,13 +669,13 @@ export function MeetingCalendar({
                         dragStartIdx !== null &&
                         dragEndIdx !== null &&
                         index >= Math.min(dragStartIdx, dragEndIdx) &&
-                        index <= Math.max(dragEndIdx, dragStartIdx) &&
+                        index <= Math.max(dragStartIdx, dragEndIdx) &&
                         slot.isCandidate
                         ? 'ring-2 ring-primary ring-inset'
                         : ''
                     )}
                   >
-                    {/* 가능 영역 */}
+                    {/* 가능 영역 (B 스타일 바) */}
                     {slot.isCandidate && slot.availableCount > 0 && (
                       <div
                         className="absolute left-0 top-0 bottom-0 bg-teal-50 dark:bg-teal-900/40 transition-all duration-300 flex items-center justify-start px-2 sm:px-3 overflow-hidden"
@@ -721,34 +698,34 @@ export function MeetingCalendar({
                       </div>
                     )}
 
-                    {slot.isCandidate &&
-                      slot.totalParticipants - slot.availableCount > 0 && (
-                        <div
-                          className="absolute top-0 bottom-0 bg-pink-50 dark:bg-pink-900/30 transition-all duration-300 flex items-center justify-start px-2 sm:px-3 overflow-hidden"
-                          style={{
-                            right: 0,
-                            width: `${unavailableRatio * 100}%`,
-                            paddingRight: '80px',
-                          }}
-                        >
-                          <div className="flex flex-col items-start min-w-0">
-                            <span className="text-xs font-bold text-pink-700 dark:text-pink-300 whitespace-nowrap">
-                              {slot.totalParticipants - slot.availableCount}명
-                              불가
-                            </span>
-                            {slotWithParticipants.unavailableParticipants &&
-                              slotWithParticipants.unavailableParticipants
-                                .length > 0 && (
-                                <span className="text-[10px] text-pink-600 dark:text-pink-400 truncate max-w-full">
-                                  {slotWithParticipants.unavailableParticipants.join(
-                                    ', '
-                                  )}
-                                </span>
-                              )}
-                          </div>
+                    {/* 불가능 영역 (B 스타일 바) */}
+                    {slot.isCandidate && unavailableCount > 0 && (
+                      <div
+                        className="absolute top-0 bottom-0 bg-pink-50 dark:bg-pink-900/30 transition-all duration-300 flex items-center justify-start px-2 sm:px-3 overflow-hidden"
+                        style={{
+                          right: 0,
+                          width: `${unavailableRatio * 100}%`,
+                          paddingRight: '80px',
+                        }}
+                      >
+                        <div className="flex flex-col items-start min-w-0">
+                          <span className="text-xs font-bold text-pink-700 dark:text-pink-300 whitespace-nowrap">
+                            {unavailableCount}명 불가
+                          </span>
+                          {slotWithParticipants.unavailableParticipants &&
+                            slotWithParticipants.unavailableParticipants
+                              .length > 0 && (
+                              <span className="text-[10px] text-pink-600 dark:text-pink-400 truncate max-w-full">
+                                {slotWithParticipants.unavailableParticipants.join(
+                                  ', '
+                                )}
+                              </span>
+                            )}
                         </div>
-                      )}
+                      </div>
+                    )}
 
+                    {/* 오른쪽 내 상태 뱃지 */}
                     <div className="absolute right-2 flex items-center gap-2 z-10 pointer-events-none">
                       {isAvailable && (
                         <div className="flex items-center gap-1 text-teal-700 dark:text-teal-300 bg-teal-100/95 dark:bg-teal-900/80 px-2 py-1 rounded-full shadow-sm">
