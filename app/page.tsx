@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Calendar } from '@/components/calendar';
 import { EventDialog } from '@/components/event-dialog';
@@ -20,6 +20,7 @@ import {
 import { mapRawToCalendarEvent } from '@/lib/calendar-utils';
 import type { RawCalendarEvent, Event } from '@/types/calendar';
 import { useEventRefresh } from '@/hooks/useEventRefresh';
+import { fetchEvents } from '@/app/api/calendar/calendar';
 
 export default function HomePage() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -37,12 +38,11 @@ export default function HomePage() {
 
   const isMobile = useIsMobile();
 
-  // 🔥 전역 refresh 트리거
   const { trigger } = useEventRefresh();
 
   const initialLoadDoneRef = useRef(false);
+  const loadedMonthsRef = useRef<Set<string>>(new Set());
 
-  // 서버 응답 → 화면용 이벤트로 변환
   const mapRaw = (list: RawCalendarEvent[]): Event[] =>
     list
       .map((raw, idx) => {
@@ -62,7 +62,6 @@ export default function HomePage() {
         (a: Event, b: Event) => a.startDate.getTime() - b.startDate.getTime()
       );
 
-  // ✅ trigger가 바뀔 때마다 전체 이벤트 다시 로딩 (초기 로드 또는 강제 새로고침)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -73,6 +72,12 @@ export default function HomePage() {
         if (cancelled) return;
         setEvents(mapRaw(raw as RawCalendarEvent[]));
         initialLoadDoneRef.current = true;
+        raw.forEach((evt: RawCalendarEvent) => {
+          if (evt.start) {
+            const d = new Date(evt.start);
+            loadedMonthsRef.current.add(`${d.getFullYear()}-${d.getMonth()}`);
+          }
+        });
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.message ?? '데이터를 불러올 수 없습니다');
@@ -92,7 +97,6 @@ export default function HomePage() {
     const sseUrl = `${API_BASE}/api/sse/events`;
     const es = new EventSource(sseUrl);
 
-    // SSE는 에러 감지만 - 성공적인 업데이트는 낙관적 UI로 처리
     es.onerror = () => {
       console.warn('[v0] SSE 연결 끊김 - 캘린더 갱신 필요');
       es.close();
@@ -103,9 +107,64 @@ export default function HomePage() {
     };
   }, []);
 
-  // =============================
-  // 캘린더 인터랙션 핸들러들
-  // =============================
+  const handleMonthChange = useCallback(
+    async (months: Date[]) => {
+      if (!initialLoadDoneRef.current) return;
+
+      const newMonths = months.filter((m) => {
+        const key = `${m.getFullYear()}-${m.getMonth()}`;
+        return !loadedMonthsRef.current.has(key);
+      });
+
+      if (newMonths.length === 0) return;
+
+      const sortedMonths = [...newMonths].sort(
+        (a, b) => a.getTime() - b.getTime()
+      );
+      const startMonth = sortedMonths[0];
+      const endMonth = sortedMonths[sortedMonths.length - 1];
+
+      const startDate = new Date(
+        startMonth.getFullYear(),
+        startMonth.getMonth(),
+        1
+      );
+      const endDate = new Date(
+        endMonth.getFullYear(),
+        endMonth.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999
+      );
+
+      try {
+        const raw = await fetchEvents({
+          start: startDate.toISOString(),
+          end: endDate.toISOString(),
+        });
+
+        newMonths.forEach((m) => {
+          loadedMonthsRef.current.add(`${m.getFullYear()}-${m.getMonth()}`);
+        });
+
+        if (raw.length > 0) {
+          setEvents((prev) => {
+            const existingIds = new Set(prev.map((e) => e.id));
+            const newEvents = mapRaw(raw).filter((e) => !existingIds.has(e.id));
+            if (newEvents.length === 0) return prev;
+            return [...prev, ...newEvents].sort(
+              (a, b) => a.startDate.getTime() - b.startDate.getTime()
+            );
+          });
+        }
+      } catch (err) {
+        console.warn('[v0] 추가 이벤트 로드 실패:', err);
+      }
+    },
+    [colorMap]
+  );
 
   const handleEventClick = (event: Event) => {
     setSelectedEvent(event);
@@ -137,21 +196,15 @@ export default function HomePage() {
     setIsDialogOpen(true);
   };
 
-  // ✅ 동기화 버튼: 구글 OAuth 시작
   const syncNow = () => {
     const base = API_BASE || 'http://localhost:8080';
     window.location.href = `${base}/oauth2/authorization/google`;
   };
 
-  // =============================
-  // 저장 / 삭제 (낙관적 UI 로직)
-  // =============================
-
   const handleSaveEvent = async (event: Event) => {
     setIsDialogOpen(false);
     setIsEditMode(false);
 
-    // API 요청에 필요한 payload 미리 준비
     const formatToISO = (
       date: Date,
       allDay: boolean,
@@ -181,7 +234,6 @@ export default function HomePage() {
       color: event.color,
     };
 
-    // 임시 ID 및 가짜 이벤트 생성
     const tempId = selectedEvent ? selectedEvent.id : `temp-${Date.now()}`;
     const optimisticEvent: Event = { ...event, id: tempId };
 
@@ -196,11 +248,9 @@ export default function HomePage() {
       setEvents((prev) => [...prev, optimisticEvent]);
     }
 
-    // 백그라운드에서 API 호출 진행
     try {
       if (selectedEvent) {
         const realEvent = await updateCalendarEvent(tempId, requestPayload);
-        // 서버 응답으로 ID나 다른 속성이 변경되었을 수 있으므로 업데이트
         setEvents((prev) =>
           prev.map((e) => (e.id === tempId ? mapRaw([realEvent])[0] : e))
         );
@@ -209,7 +259,6 @@ export default function HomePage() {
         );
       } else {
         const realEvent = await createCalendarEvent(requestPayload);
-        // 임시 ID를 실제 서버 ID로 교체
         setEvents((prev) =>
           prev.map((e) => (e.id === tempId ? mapRaw([realEvent])[0] : e))
         );
@@ -252,10 +301,6 @@ export default function HomePage() {
       setEvents(previousEvents);
     }
   };
-
-  // =============================
-  // 렌더
-  // =============================
 
   return (
     <ProtectedRoute>
@@ -301,6 +346,7 @@ export default function HomePage() {
                 onEventDoubleClick={handleEventClick}
                 onDateRangeSelect={handleDateRangeSelect}
                 onCreateNewEvent={handleCreateNewEventFromBottomSheet}
+                onMonthChange={handleMonthChange}
               />
             )}
           </div>
