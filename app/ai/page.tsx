@@ -171,6 +171,32 @@ const MeetingCard = ({ data }: { data: any }) => {
 // --- Main Component ---
 
 export default function AIPage() {
+
+  useEffect(() => {
+    // 1. 브라우저 환경인지 확인
+    if (typeof window === 'undefined') return;
+
+    const isTTSAvailable = 'speechSynthesis' in window;
+    
+    // 2. IWindow 인터페이스를 통해 SpeechRecognition 타입 접근
+    const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
+    const isSTTAvailable = !!(SpeechRecognition || webkitSpeechRecognition);
+
+    // 3. 미지원 기능이 있다면 토스트 알림
+    if (!isTTSAvailable || !isSTTAvailable) {
+      const missingFeatures = [];
+      if (!isTTSAvailable) missingFeatures.push("음성 듣기(TTS)");
+      if (!isSTTAvailable) missingFeatures.push("음성 인식(STT)");
+
+      toast({
+        title: "브라우저 호환성 안내",
+        description: `현재 브라우저는 TTS 기능을 지원하지 않습니다. Chrome 브라우저를 사용해주세요.`,
+        variant: "destructive", // 빨간색 알림으로 강조
+        duration: 5000, // 5초간 표시
+      });
+    }
+  }, []);
+
   // ✅ [수정] 초기 환영 메시지를 구체적으로 변경
   const [messages, setMessages] = useState<Message[]>([
     {
