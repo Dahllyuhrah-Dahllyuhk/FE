@@ -20,7 +20,7 @@ import {
   MapPin,
   Users,
   CheckCircle,
-  ChevronRight, // ✅ UI 개선: 화살표 아이콘 추가
+  ChevronRight,
 } from 'lucide-react';
 import { API_BASE } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
@@ -37,8 +37,8 @@ type AIResponseData = {
 type Message = {
   id: string;
   role: 'user' | 'assistant';
-  content?: string;
-  aiData?: AIResponseData;
+  content?: string;      // 말풍선 텍스트 & TTS 대상
+  aiData?: AIResponseData; // 카드 데이터 (TTS 안 읽음)
   timestamp: Date;
 };
 
@@ -47,8 +47,10 @@ interface IWindow extends Window {
   SpeechRecognition: any;
 }
 
-// --- Sub Components (카드 UI) ---
 const BE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';
+
+// --- Sub Components (카드 UI) ---
+
 // 1. 일정(Schedule) 카드
 const ScheduleCard = ({ data }: { data: any }) => {
   const router = useRouter();
@@ -99,7 +101,7 @@ const ScheduleCard = ({ data }: { data: any }) => {
   );
 };
 
-// 2. 모임(Meeting) 카드 (✅ UI 개선 적용)
+// 2. 모임(Meeting) 카드
 const MeetingCard = ({ data }: { data: any }) => {
   const router = useRouter();
   const meetings = Array.isArray(data) ? data : [data];
@@ -129,7 +131,6 @@ const MeetingCard = ({ data }: { data: any }) => {
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center gap-1 overflow-hidden">
                   <h4 className="font-bold text-sm truncate">{meeting.name}</h4>
-                  {/* ✅ 바로가기 화살표 아이콘 (평소엔 흐리게, 호버시 진하게) */}
                   <ChevronRight className="w-3 h-3 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />
                 </div>
                 <Badge variant={meeting.status === 'CONFIRMED' ? 'default' : 'outline'} className="text-[10px] px-1 shrink-0">
@@ -171,33 +172,6 @@ const MeetingCard = ({ data }: { data: any }) => {
 // --- Main Component ---
 
 export default function AIPage() {
-
-  useEffect(() => {
-    // 1. 브라우저 환경인지 확인
-    if (typeof window === 'undefined') return;
-
-    const isTTSAvailable = 'speechSynthesis' in window;
-    
-    // 2. IWindow 인터페이스를 통해 SpeechRecognition 타입 접근
-    const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
-    const isSTTAvailable = !!(SpeechRecognition || webkitSpeechRecognition);
-
-    // 3. 미지원 기능이 있다면 토스트 알림
-    if (!isTTSAvailable || !isSTTAvailable) {
-      const missingFeatures = [];
-      if (!isTTSAvailable) missingFeatures.push("음성 듣기(TTS)");
-      if (!isSTTAvailable) missingFeatures.push("음성 인식(STT)");
-
-      toast({
-        title: "브라우저 호환성 안내",
-        description: `현재 브라우저는 TTS 기능을 지원하지 않습니다. Chrome 브라우저를 사용해주세요.`,
-        variant: "destructive", // 빨간색 알림으로 강조
-        duration: 5000, // 5초간 표시
-      });
-    }
-  }, []);
-
-  // ✅ [수정] 초기 환영 메시지를 구체적으로 변경
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -264,27 +238,32 @@ export default function AIPage() {
 
         recognition.onend = () => setIsListening(false);
         recognitionRef.current = recognition;
+      } else {
+        // 미지원 브라우저 안내
+        toast({
+            title: "브라우저 호환성 안내",
+            description: "음성 인식을 지원하지 않는 브라우저입니다. Chrome 사용을 권장합니다.",
+            variant: "destructive",
+            duration: 5000,
+        });
       }
     }
   }, []);
 
-  // --- Web Speech API: TTS (음성 합성) 개선 ---
+  // --- Web Speech API: TTS (음성 합성) ---
   const speak = (text: string) => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       const synth = window.speechSynthesis;
       
-      // 말하고 있던 게 있다면 중단
       if (synth.speaking) {
         synth.cancel();
       }
 
       const utterance = new SpeechSynthesisUtterance(text);
       
-      // ✅ [개선] 한국어 목소리 찾기 로직
-      // Chrome의 경우 getVoices가 비동기일 수 있어 onvoiceschanged 이벤트나 재시도가 필요할 수 있음
+      // 목소리 설정 (Google 한국어 우선)
       const setVoice = () => {
         const voices = synth.getVoices();
-        // 1순위: Google 한국어, 2순위: 아무 한국어
         const koVoice = voices.find(v => v.lang.includes('ko') && v.name.includes('Google')) 
                      || voices.find(v => v.lang.includes('ko'));
         
@@ -293,13 +272,12 @@ export default function AIPage() {
         }
         
         utterance.lang = 'ko-KR';
-        utterance.rate = 1.0; // 속도 (약간 차분하게 하려면 0.9)
+        utterance.rate = 1.0; 
         utterance.pitch = 1.0; 
         
         synth.speak(utterance);
       };
 
-      // 목소리 목록이 로드되어 있으면 바로 실행, 아니면 이벤트 대기
       if (synth.getVoices().length > 0) {
         setVoice();
       } else {
@@ -310,15 +288,14 @@ export default function AIPage() {
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      toast({ title: "지원 불가", description: "이 브라우저는 음성 인식을 지원하지 않아요...", variant: "destructive" });
+      toast({ title: "지원 불가", description: "이 브라우저는 음성 인식을 지원하지 않습니다.", variant: "destructive" });
       return;
     }
     if (isListening) {
       recognitionRef.current.stop();
     } else {
-      // 내가 말할 때는 TTS 멈춤
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+        window.speechSynthesis.cancel(); // 내가 말할 땐 AI 목소리 끄기
       }
       recognitionRef.current.start();
       setIsListening(true);
@@ -340,6 +317,7 @@ export default function AIPage() {
     setIsTyping(true);
 
     try {
+      // 백엔드 호출
       const response = await fetch(`${BE}/api/chat/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -357,20 +335,23 @@ export default function AIPage() {
         timestamp: new Date(),
       };
 
+      // 🔥 [핵심] TTS는 오직 aiMessage.content만 읽습니다.
+      // 카드는 aiMessage.aiData에 저장되어 TTS에 영향 주지 않음.
       if (result.category && result.data) {
         aiMessage.aiData = {
           category: result.category,
           data: result.data
         };
-        // 백엔드에서 온 summary 사용 (없으면 기본 멘트)
-        aiMessage.content = result.summary || '요청하신 작업을 완료했어요.';
+        // 백엔드에서 온 summary(요약 멘트)를 말풍선 내용으로 설정
+        aiMessage.content = result.summary || '요청하신 작업을 완료했습니다.';
       } else {
+        // 일반 대화인 경우
         aiMessage.content = typeof result.data === 'string' ? result.data : JSON.stringify(result);
       }
 
       setMessages((prev) => [...prev, aiMessage]);
 
-      // ✅ TTS로 읽어주기
+      // 🔊 TTS 실행 (summary만 읽음)
       if (aiMessage.content) {
         speak(aiMessage.content);
       }
@@ -394,19 +375,19 @@ export default function AIPage() {
     return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // --- 렌더러 함수 (말풍선 분리 로직) ---
+  // --- 말풍선과 카드를 분리해서 렌더링 ---
   const renderAIMessage = (msg: Message) => {
     const hasData = msg.aiData && msg.aiData.data;
     const { category, data } = msg.aiData || {};
 
     return (
       <div className="flex flex-col gap-1 max-w-[85%] items-start">
-        {/* 1. 텍스트 말풍선 */}
+        {/* 1. 텍스트 말풍선 (TTS가 읽는 부분) */}
         <div className="p-3 rounded-2xl bg-muted/50 rounded-tl-none text-sm leading-relaxed whitespace-pre-wrap">
           {msg.content}
         </div>
 
-        {/* 2. 카드 (말풍선 아래에 위치) */}
+        {/* 2. 카드 데이터 (TTS 안 읽음, 화면에만 표시) */}
         {hasData && (
           <div className="w-full">
             {(category === '일정생성' || category === '일정조회' || category === '일정삭제') && (
@@ -418,7 +399,6 @@ export default function AIPage() {
           </div>
         )}
 
-        {/* 3. 시간 */}
         <span className="text-[10px] text-muted-foreground px-1">
           {formatTime(msg.timestamp)}
         </span>
@@ -435,7 +415,8 @@ export default function AIPage() {
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">AI로 요청해보세요</h1>
+              <h1 className="text-xl font-bold text-foreground">AI 어시스턴트</h1>
+              <p className="text-xs text-muted-foreground">음성으로 일정 관리하기</p>
             </div>
           </div>
         </header>
@@ -472,7 +453,6 @@ export default function AIPage() {
                       </span>
                     </div>
                   ) : (
-                    // AI 메시지 렌더링 (말풍선 + 카드 분리)
                     renderAIMessage(message)
                   )}
                 </div>
