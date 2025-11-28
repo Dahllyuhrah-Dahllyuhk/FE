@@ -15,6 +15,7 @@ type User = {
   id: string;
   nickname: string;
   profileImageUrl?: string | null;
+  createdAt?:string;
 };
 
 type AuthContextType = {
@@ -49,6 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         id: data.id,
         nickname: data.nickname,
         profileImageUrl: data.profileImageUrl,
+        createdAt: data.createdAt
       });
     } catch (e) {
       console.error('auth /api/auth/me error', e);
