@@ -1,0 +1,515 @@
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/protected-route';
+import { BottomNav } from '@/components/bottom-nav';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Send,
+  Bot,
+  User,
+  Sparkles,
+  Mic,
+  MicOff,
+  Calendar as CalendarIcon,
+  Clock,
+  MapPin,
+  Users,
+  CheckCircle,
+  ChevronRight,
+} from 'lucide-react';
+import { API_BASE } from '@/lib/api';
+import { toast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
+
+// --- Types ---
+
+type AIResponseData = {
+  category: string;
+  data: any;
+};
+
+type Message = {
+  id: string;
+  role: 'user' | 'assistant';
+  content?: string;      // 말풍선 텍스트 & TTS 대상
+  aiData?: AIResponseData; // 카드 데이터 (TTS 안 읽음)
+  timestamp: Date;
+};
+
+interface IWindow extends Window {
+  webkitSpeechRecognition: any;
+  SpeechRecognition: any;
+}
+
+const BE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';
+
+// --- Sub Components (카드 UI) ---
+
+// 1. 일정(Schedule) 카드 (날짜 오류 방지 추가됨)
+const ScheduleCard = ({ data }: { data: any }) => {
+  const router = useRouter();
+  const events = Array.isArray(data) ? data : [data];
+
+  if (events.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2 w-full max-w-[280px] sm:max-w-sm mt-1">
+      {events.map((evt: any, idx: number) => {
+        // 날짜 데이터 추출 및 유효성 검사
+        const startVal = evt.start || evt.startTimestamp;
+        const endVal = evt.end || evt.endTimestamp;
+        
+        const startDate = startVal ? new Date(startVal) : null;
+        const endDate = endVal ? new Date(endVal) : null;
+        
+        // 날짜가 유효하지 않으면(Invalid Date) 렌더링하지 않음
+        if (!startDate || isNaN(startDate.getTime())) return null;
+        
+        const isAllDay = evt.allDay;
+
+        return (
+          <Card 
+            key={evt.id || idx} 
+            onClick={() => router.push('/')}
+            className="border-l-4 overflow-hidden shadow-sm cursor-pointer hover:bg-accent/50 transition-colors active:scale-95 duration-200"
+            style={{ borderLeftColor: evt.color || '#3b82f6' }}
+          >
+            <CardContent className="p-3">
+              <div className="flex justify-between items-center mb-1">
+                <h4 className="font-bold text-sm truncate flex-1 pr-2">{evt.title || evt.summary || '제목 없음'}</h4>
+                {isAllDay && <Badge variant="secondary" className="text-[10px] px-1 shrink-0">종일</Badge>}
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                {evt.description && <p className="line-clamp-1">{evt.description}</p>}
+                <div className="flex items-center gap-1">
+                  <CalendarIcon className="w-3 h-3 shrink-0" />
+                  <span>
+                    {format(startDate, 'M월 d일 (E)', { locale: ko })}
+                    {!isAllDay && endDate && !isNaN(endDate.getTime()) && 
+                      ` ${format(startDate, 'HH:mm')} ~ ${format(endDate, 'HH:mm')}`
+                    }
+                  </span>
+                </div>
+                {evt.location && (
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{evt.location}</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+};
+
+// 2. 모임(Meeting) 카드 (날짜 오류 방지 추가됨)
+const MeetingCard = ({ data }: { data: any }) => {
+  const router = useRouter();
+  const meetings = Array.isArray(data) ? data : [data];
+
+  if (meetings.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2 w-full max-w-[280px] sm:max-w-sm mt-1">
+      {meetings.map((meeting: any, idx: number) => {
+        const req = meeting.requirement || {};
+        const startStr = req.dateRangeStart || '미정';
+        const endStr = req.dateRangeEnd || '미정';
+        
+        const statusLabels: Record<string, string> = {
+          PENDING: '조율 중',
+          CONFIRMED: '확정됨',
+          CLOSED: '종료됨'
+        };
+
+        // 확정 날짜 유효성 검사
+        const confirmedDate = meeting.confirmedStart ? new Date(meeting.confirmedStart) : null;
+        const isValidConfirmed = confirmedDate && !isNaN(confirmedDate.getTime());
+
+        return (
+          <Card 
+            key={meeting.id || idx} 
+            onClick={() => router.push(`/meetings/${meeting.id}`)}
+            className="bg-card shadow-sm cursor-pointer hover:bg-accent/50 transition-all active:scale-95 duration-200 group"
+          >
+            <CardContent className="p-3">
+              <div className="flex justify-between items-center mb-2">
+                <div className="flex items-center gap-1 overflow-hidden">
+                  <h4 className="font-bold text-sm truncate">{meeting.name}</h4>
+                  <ChevronRight className="w-3 h-3 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />
+                </div>
+                <Badge variant={meeting.status === 'CONFIRMED' ? 'default' : 'outline'} className="text-[10px] px-1 shrink-0">
+                  {statusLabels[meeting.status] || meeting.status}
+                </Badge>
+              </div>
+              
+              <div className="text-xs text-muted-foreground space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{startStr} ~ {endStr}</span>
+                </div>
+                
+                {isValidConfirmed ? (
+                   <div className="flex items-center gap-1.5 text-green-600 font-medium">
+                     <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                     <span>확정: {format(confirmedDate!, 'M/d HH:mm')}</span>
+                   </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>시간 조율 필요</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span>참여자 {meeting.participants?.length || 0}명</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+    </div>
+  );
+};
+
+// --- Main Component ---
+
+export default function AIPage() {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      role: 'assistant',
+      content: `안녕하세요! 👋
+일정과 모임 관리를 도와드릴게요!
+
+아래처럼 편하게 말씀해 주세요! 🗣️
+
+📅 **일정 관리**
+- "내일 오후 7시 회식 일정 잡아줘"
+- "이번 주 일정 모두 보여줘"
+- "3시에 있는 미팅 삭제해줘"
+
+👥 **모임 관리**
+- "이번 주말 등산 모임 만들어줘"
+- "송년회 모임 상태 알려줘"`,
+      timestamp: new Date(),
+    },
+  ]);
+  const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  
+  const recognitionRef = useRef<any>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 스크롤 자동 이동
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isTyping]);
+
+  // --- Web Speech API: STT (음성 인식) ---
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
+      const SpeechRecognitionConstructor = SpeechRecognition || webkitSpeechRecognition;
+
+      if (SpeechRecognitionConstructor) {
+        const recognition = new SpeechRecognitionConstructor();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'ko-KR';
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          setInput((prev) => prev + (prev ? ' ' : '') + transcript);
+          setIsListening(false);
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onerror = (event: any) => {
+          console.error('Speech recognition error', event.error);
+          setIsListening(false);
+          toast({
+            title: "음성 인식 오류",
+            description: "다시 시도해주세요.",
+            variant: "destructive"
+          });
+        };
+
+        recognition.onend = () => setIsListening(false);
+        recognitionRef.current = recognition;
+      } else {
+        // 미지원 브라우저 안내 (토스트 제거됨 - 선택사항)
+      }
+    }
+  }, []);
+
+  // --- Web Speech API: TTS (음성 합성) ---
+  const speak = (text: string) => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const synth = window.speechSynthesis;
+      
+      if (synth.speaking) {
+        synth.cancel();
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // 목소리 설정 (Google 한국어 우선)
+      const setVoice = () => {
+        const voices = synth.getVoices();
+        const koVoice = voices.find(v => v.lang.includes('ko') && v.name.includes('Google')) 
+                     || voices.find(v => v.lang.includes('ko'));
+        
+        if (koVoice) {
+          utterance.voice = koVoice;
+        }
+        
+        utterance.lang = 'ko-KR';
+        utterance.rate = 1.0; 
+        utterance.pitch = 1.0; 
+        
+        synth.speak(utterance);
+      };
+
+      if (synth.getVoices().length > 0) {
+        setVoice();
+      } else {
+        synth.onvoiceschanged = setVoice;
+      }
+    }
+  };
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      toast({ title: "지원 불가", description: "이 브라우저는 음성 인식을 지원하지 않습니다.", variant: "destructive" });
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+    } else {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); // 내가 말할 땐 AI 목소리 끄기
+      }
+      recognitionRef.current.start();
+      setIsListening(true);
+      toast({ title: "듣고 있어요...", description: "말씀해 주세요." });
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput('');
+    setIsTyping(true);
+
+    try {
+      // 백엔드 호출
+      const response = await fetch(`${BE}/api/chat/call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ prompt : userMessage.content }),
+      });
+
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+      const result = await response.json();
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        timestamp: new Date(),
+      };
+
+      // 🔥 TTS는 오직 aiMessage.content만 읽습니다.
+      if (result.category && result.data) {
+        aiMessage.aiData = {
+          category: result.category,
+          data: result.data
+        };
+        // 백엔드에서 온 summary(요약 멘트)를 말풍선 내용으로 설정
+        aiMessage.content = result.summary || '요청하신 작업을 완료했습니다.';
+      } else {
+        // 일반 대화인 경우
+        aiMessage.content = typeof result.data === 'string' ? result.data : JSON.stringify(result);
+      }
+
+      setMessages((prev) => [...prev, aiMessage]);
+
+      // 🔊 TTS 실행 (summary만 읽음)
+      if (aiMessage.content) {
+        speak(aiMessage.content);
+      }
+
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      const errorMsg = '처리 중 오류가 발생했어요 ..';
+      setMessages((prev) => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: errorMsg,
+        timestamp: new Date(),
+      }]);
+      speak(errorMsg);
+    } finally {
+      setIsTyping(false);
+    }
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // --- 렌더러 함수 (말풍선 분리 로직) ---
+  const renderAIMessage = (msg: Message) => {
+    const hasData = msg.aiData && msg.aiData.data;
+    const { category, data } = msg.aiData || {};
+
+    return (
+      <div className="flex flex-col gap-1 max-w-[85%] items-start">
+        {/* 1. 텍스트 말풍선 (TTS가 읽는 부분) */}
+        <div className="p-3 rounded-2xl bg-muted/50 rounded-tl-none text-sm leading-relaxed whitespace-pre-wrap">
+          {msg.content}
+        </div>
+
+        {/* 2. 카드 데이터 (TTS 안 읽음, 화면에만 표시) */}
+        {hasData && (
+          <div className="w-full">
+            {(category === '일정생성' || category === '일정조회' || category === '일정삭제') && (
+              <ScheduleCard data={data} />
+            )}
+            {(category === '모임생성' || category === '모임조회') && (
+              <MeetingCard data={data} />
+            )}
+          </div>
+        )}
+
+        <span className="text-[10px] text-muted-foreground px-1">
+          {formatTime(msg.timestamp)}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <ProtectedRoute>
+      <div className="flex min-h-screen flex-col bg-background pb-16">
+        <header className="border-b border-border bg-card px-4 py-4">
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-500">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">AI 어시스턴트</h1>
+              <p className="text-xs text-muted-foreground">음성으로 일정 관리하기</p>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-hidden">
+          <div ref={scrollRef} className="h-full overflow-y-auto p-4">
+            <div className="space-y-6">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
+                >
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                      message.role === 'user'
+                        ? 'bg-primary'
+                        : 'bg-gradient-to-br from-blue-500 to-purple-500'
+                    }`}
+                  >
+                    {message.role === 'user' ? (
+                      <User className="h-4 w-4 text-primary-foreground" />
+                    ) : (
+                      <Bot className="h-4 w-4 text-white" />
+                    )}
+                  </div>
+
+                  {message.role === 'user' ? (
+                    <div className="flex flex-col gap-1 max-w-[85%] items-end">
+                      <div className="p-3 rounded-2xl bg-primary text-primary-foreground rounded-tr-none text-sm leading-relaxed whitespace-pre-wrap">
+                        {message.content}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground px-1">
+                        {formatTime(message.timestamp)}
+                      </span>
+                    </div>
+                  ) : (
+                    renderAIMessage(message)
+                  )}
+                </div>
+              ))}
+
+              {isTyping && (
+                <div className="flex gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-500">
+                    <Bot className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-2xl rounded-tl-none">
+                    <div className="flex gap-1">
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s]" />
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s]" />
+                      <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+
+        <div className="border-t border-border bg-card p-4">
+          <div className="flex gap-2">
+            <Button
+              variant={isListening ? "destructive" : "outline"}
+              size="icon"
+              onClick={toggleListening}
+              className={`transition-all ${isListening ? 'animate-pulse ring-2 ring-destructive/30' : ''}`}
+            >
+              {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </Button>
+
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+              placeholder="메시지 입력 또는 음성 대화..."
+              className="flex-1"
+              disabled={isTyping}
+            />
+            <Button onClick={handleSend} size="icon" disabled={isTyping || !input.trim()}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <BottomNav />
+      </div>
+    </ProtectedRoute>
+  );
+}
