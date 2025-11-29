@@ -1,8 +1,8 @@
-name: Build, Push FE Image & Deploy
+name: Build & Push FE Image
 
 on:
   push:
-    branches: ['develop']
+    branches: ['main']
   workflow_dispatch: {}
 
 env:
@@ -11,7 +11,7 @@ env:
   ECR_REPO: ${{ secrets.ECR_FE_REPO }}
 
 jobs:
-  build-and-push:
+  build-and-push-fe:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -48,32 +48,3 @@ jobs:
         run: |
           docker push $IMAGE_NAME:latest
           docker push $IMAGE_NAME:${{ github.sha }}
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build-and-push
-
-    steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_KEY }}
-          script: |
-            # 0. ECR 로그인 (Github Secrets 활용하여 보안 강화)
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
-
-            cd /home/ubuntu/matuabom
-
-            # 1. git pull 제거 (필요 없음)
-            # git pull
-
-            # 2. 최신 FE 이미지 다운로드 (docker compose v2 사용)
-            docker compose pull fe
-
-            # 3. FE 서비스 강제 재생성 및 재시작
-            docker compose up -d --no-deps --force-recreate fe
-
-            # 4. 이미지 정리
-            docker image prune -f
