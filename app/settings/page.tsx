@@ -5,165 +5,147 @@ import { useTheme } from 'next-themes';
 import { useAuth } from '@/context/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { BottomNav } from '@/components/bottom-nav';
-import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import {
-  ChevronRight,
-  Bell,
-  Moon,
-  Globe,
-  Lock,
-  HelpCircle,
-  LogOut,
+  ChevronRight, Bell, Moon, Globe, Lock, HelpCircle, LogOut,
 } from 'lucide-react';
+
+function SettingRow({
+  icon: Icon,
+  label,
+  description,
+  right,
+  onClick,
+}: {
+  icon: React.ElementType;
+  label: string;
+  description?: string;
+  right?: React.ReactNode;
+  onClick?: () => void;
+}) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      className={`list-row w-full gap-3 ${onClick ? 'hover:opacity-70 active:opacity-50 transition-opacity' : ''}`}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-3 flex-1 min-w-0 text-left">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent flex-shrink-0">
+          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-foreground leading-tight">{label}</p>
+          {description && (
+            <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{description}</p>
+          )}
+        </div>
+      </div>
+      {right ?? (onClick && <ChevronRight className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />)}
+    </Tag>
+  );
+}
+
+import type React from 'react';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const { logout } = useAuth(); // ✅ context의 logout 사용
+  const { logout } = useAuth();
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(false);
 
   return (
     <ProtectedRoute>
       <div className="flex min-h-screen flex-col bg-background pb-16">
-        <header className="border-b border-border bg-card px-4 py-4">
-          <h1 className="text-2xl font-bold text-foreground">설정</h1>
+        <header className="page-header">
+          <div className="page-header-inner">
+            <h1 className="page-title">설정</h1>
+          </div>
         </header>
 
-        <main className="flex-1 p-4">
-          <div className="space-y-6">
-            <Card className="p-4">
-              <h2 className="mb-4 text-lg font-semibold text-foreground">
-                알림
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <Label htmlFor="push-notifications" className="text-base">
-                        푸시 알림
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        일정 알림을 받습니다
-                      </p>
-                    </div>
-                  </div>
+        <main className="flex-1 overflow-y-auto p-4 space-y-6">
+
+          {/* 알림 */}
+          <section>
+            <p className="section-title">알림</p>
+            <div className="notion-card px-4">
+              <SettingRow
+                icon={Bell}
+                label="푸시 알림"
+                description="일정 및 모임 알림을 받습니다"
+                right={
                   <Switch
-                    id="push-notifications"
                     checked={pushNotifications}
                     onCheckedChange={setPushNotifications}
                   />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Bell className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <Label
-                        htmlFor="email-notifications"
-                        className="text-base"
-                      >
-                        이메일 알림
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        이메일로 알림을 받습니다
-                      </p>
-                    </div>
-                  </div>
+                }
+              />
+              <SettingRow
+                icon={Bell}
+                label="이메일 알림"
+                description="이메일로 알림을 받습니다"
+                right={
                   <Switch
-                    id="email-notifications"
                     checked={emailNotifications}
                     onCheckedChange={setEmailNotifications}
                   />
-                </div>
-              </div>
-            </Card>
+                }
+              />
+            </div>
+          </section>
 
-            <Card className="p-4">
-              <h2 className="mb-4 text-lg font-semibold text-foreground">
-                표시
-              </h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Moon className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <Label htmlFor="dark-mode" className="text-base">
-                        다크 모드
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        어두운 테마를 사용합니다
-                      </p>
-                    </div>
-                  </div>
+          {/* 표시 */}
+          <section>
+            <p className="section-title">표시</p>
+            <div className="notion-card px-4">
+              <SettingRow
+                icon={Moon}
+                label="다크 모드"
+                description="어두운 테마를 사용합니다"
+                right={
                   <Switch
-                    id="dark-mode"
                     checked={theme === 'dark'}
-                    onCheckedChange={(checked) =>
-                      setTheme(checked ? 'dark' : 'light')
-                    }
+                    onCheckedChange={(checked) => setTheme(checked ? 'dark' : 'light')}
                   />
-                </div>
-                <Separator />
-                <button className="flex w-full items-center justify-between transition-colors hover:opacity-70">
-                  <div className="flex items-center gap-3">
-                    <Globe className="h-5 w-5 text-muted-foreground" />
-                    <div className="text-left">
-                      <Label className="text-base">언어</Label>
-                      <p className="text-sm text-muted-foreground">한국어</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </button>
-              </div>
-            </Card>
+                }
+              />
+              <SettingRow
+                icon={Globe}
+                label="언어"
+                description="한국어"
+                onClick={() => {}}
+              />
+            </div>
+          </section>
 
-            <Card className="p-4">
-              <h2 className="mb-4 text-lg font-semibold text-foreground">
-                계정
-              </h2>
-              <div className="space-y-4">
-                <button className="flex w-full items-center justify-between transition-colors hover:opacity-70">
-                  <div className="flex items-center gap-3">
-                    <Lock className="h-5 w-5 text-muted-foreground" />
-                    <div className="text-left">
-                      <Label className="text-base">개인정보 보호</Label>
-                      <p className="text-sm text-muted-foreground">
-                        보안 및 개인정보 설정
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </button>
-                <Separator />
-                <button className="flex w-full items-center justify-between transition-colors hover:opacity-70">
-                  <div className="flex items-center gap-3">
-                    <HelpCircle className="h-5 w-5 text-muted-foreground" />
-                    <div className="text-left">
-                      <Label className="text-base">도움말</Label>
-                      <p className="text-sm text-muted-foreground">
-                        자주 묻는 질문 및 지원
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </button>
-              </div>
-            </Card>
+          {/* 계정 */}
+          <section>
+            <p className="section-title">계정</p>
+            <div className="notion-card px-4">
+              <SettingRow
+                icon={Lock}
+                label="개인정보 보호"
+                description="보안 및 개인정보 설정"
+                onClick={() => {}}
+              />
+              <SettingRow
+                icon={HelpCircle}
+                label="도움말"
+                description="자주 묻는 질문 및 지원"
+                onClick={() => {}}
+              />
+            </div>
+          </section>
 
-            <Button
-              variant="destructive"
-              className="w-full gap-2"
-              onClick={logout} // ✅ 수정됨: 직접 logout 함수 호출
-            >
-              <LogOut className="h-4 w-4" />
-              로그아웃
-            </Button>
-          </div>
+          {/* 로그아웃 */}
+          <button
+            onClick={logout}
+            className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-destructive rounded-xl border border-destructive/20 hover:bg-destructive/5 active:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            로그아웃
+          </button>
+
+          <p className="text-center text-xs text-muted-foreground/50 pb-2">맞춰봄 v1.0</p>
         </main>
 
         <BottomNav />

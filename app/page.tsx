@@ -305,20 +305,15 @@ export default function HomePage() {
   return (
     <ProtectedRoute>
       <div className="flex min-h-screen flex-col bg-background">
-        <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-          <div className="flex items-center justify-between px-4 py-2">
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground">
-                맞춰봄 캘린더
-              </span>
-              <h1 className="text-lg font-semibold md:text-xl">
-                {isMobile ? '내 일정' : '내 캘린더'}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
+        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
+          <div className="flex items-center justify-between px-4 h-12">
+            <h1 className="text-sm font-semibold text-foreground tracking-tight">
+              맞춰봄
+            </h1>
+            <div className="flex items-center gap-1">
               <button
                 onClick={syncNow}
-                className="rounded-md border px-3 py-1 text-sm hover:bg-accent"
+                className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-accent transition-colors"
                 title="구글 캘린더에서 최신 일정 동기화"
               >
                 동기화
@@ -329,7 +324,7 @@ export default function HomePage() {
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="p-4">
+          <div className="px-2 pt-0 pb-4">
             {error && (
               <Alert variant="destructive" className="mb-3 whitespace-pre-line">
                 <AlertDescription>{error}</AlertDescription>

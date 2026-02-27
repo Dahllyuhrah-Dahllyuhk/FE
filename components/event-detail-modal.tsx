@@ -6,9 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import type { Event } from '@/types/calendar';
 
@@ -78,76 +76,63 @@ export function EventDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <span
-              className={`h-4 w-4 rounded-full ${event.color}`}
-              aria-hidden="true"
-            />
-            {event.title}
-          </DialogTitle>
+      <DialogContent className="sm:max-w-[400px] p-0 overflow-hidden rounded-2xl gap-0">
+        <DialogDescription className="sr-only">일정 상세 정보</DialogDescription>
 
-          {/* ✅ 접근성 설명 추가: 경고 해소 */}
-          <DialogDescription className="sr-only" id="event-detail-desc">
-            일정 상세 정보: {event.title}. 시작{' '}
-            {formatDateTime(event.startDate)}, 종료{' '}
-            {formatDateTime(event.endDate)}.
-          </DialogDescription>
-        </DialogHeader>
+        {/* 컬러 헤더 바 */}
+        <div className={`h-1.5 w-full ${event.color}`} />
 
-        <div className="grid gap-4 py-4" aria-describedby="event-detail-desc">
-          <div className="grid gap-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              설명
-            </h3>
-            <p className="text-sm text-foreground">
-              {event.description || '설명 없음'}
-            </p>
-          </div>
+        <div className="p-5">
+          <DialogHeader className="mb-4">
+            <DialogTitle className="text-base font-semibold text-foreground leading-snug">
+              {event.title}
+            </DialogTitle>
+          </DialogHeader>
 
-          <div className="grid gap-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              기간
-            </h3>
-            <p className="text-sm text-foreground">
-              {formatRange(event.startDate, event.endDate)}
-            </p>
-          </div>
+          <div className="space-y-3">
+            {event.description && (
+              <div className="text-sm text-muted-foreground bg-accent/40 rounded-lg px-3 py-2.5 leading-relaxed">
+                {event.description}
+              </div>
+            )}
 
-          <div className="grid gap-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              진행 시간
-            </h3>
-            <p className="text-sm text-foreground">{durationLabel}</p>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-start gap-2.5 text-muted-foreground">
+                <span className="text-xs font-medium text-foreground/50 w-12 pt-0.5 flex-shrink-0">기간</span>
+                <span className="text-foreground/80">{formatRange(event.startDate, event.endDate)}</span>
+              </div>
+              {!event.allDay && (
+                <div className="flex items-start gap-2.5 text-muted-foreground">
+                  <span className="text-xs font-medium text-foreground/50 w-12 pt-0.5 flex-shrink-0">시간</span>
+                  <span className="text-foreground/80">{durationLabel}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <DialogFooter className="flex-col gap-2 sm:flex-row">
-          <Button
-            variant="destructive"
-            size="sm"
+        <div className="flex items-center gap-2 px-5 pb-5">
+          <button
             onClick={handleDelete}
-            className="sm:mr-auto"
-            aria-label="일정 삭제"
+            className="flex items-center gap-1.5 text-xs text-destructive hover:bg-destructive/8 px-3 py-2 rounded-lg transition-colors"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
             삭제
-          </Button>
-
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => onOpenChange(false)}
+            className="text-xs text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg hover:bg-accent transition-colors"
+          >
             닫기
-          </Button>
-
-          <Button
-            onClick={() => {
-              onEdit(event);
-              onOpenChange(false);
-            }}
+          </button>
+          <button
+            onClick={() => { onEdit(event); onOpenChange(false); }}
+            className="text-xs font-medium bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors"
           >
             편집
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
