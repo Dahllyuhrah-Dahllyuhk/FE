@@ -49,10 +49,9 @@ jobs:
 
           docker build \
             --build-arg NEXT_PUBLIC_API_BASE=https://matuabom.store \
+            --no-cache \
             -t $IMAGE:$SHA \
             -t $IMAGE:latest \
-            --cache-from $IMAGE:latest \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
             .
 
           docker push $IMAGE:$SHA
