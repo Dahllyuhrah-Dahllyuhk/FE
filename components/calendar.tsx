@@ -11,7 +11,6 @@ import {
 } from 'react';
 import { ChevronLeft, ChevronRight, X, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { buildMonthGrid } from '@/lib/calendar-utils';
 
@@ -150,6 +149,66 @@ const getMultiDayEventsForDate = (
   });
 };
 
+/* ===== EventChip 컴포넌트 ===== */
+// Tailwind 색상 클래스(bg-xxx)를 노션 스타일(연한 배경 + 진한 텍스트)로 변환
+const COLOR_MAP: Record<string, { bg: string; text: string; border: string; darkBg: string; darkText: string; darkBorder: string }> = {
+  'bg-blue-500':    { bg: '#dbeafe', text: '#1e40af', border: '#93c5fd', darkBg: '#1e3a5f', darkText: '#93c5fd', darkBorder: '#2563eb' },
+  'bg-green-500':   { bg: '#dcfce7', text: '#166534', border: '#86efac', darkBg: '#14532d', darkText: '#86efac', darkBorder: '#16a34a' },
+  'bg-red-500':     { bg: '#fee2e2', text: '#991b1b', border: '#fca5a5', darkBg: '#450a0a', darkText: '#fca5a5', darkBorder: '#dc2626' },
+  'bg-yellow-500':  { bg: '#fef9c3', text: '#854d0e', border: '#fde047', darkBg: '#422006', darkText: '#fde047', darkBorder: '#ca8a04' },
+  'bg-purple-500':  { bg: '#f3e8ff', text: '#6b21a8', border: '#d8b4fe', darkBg: '#3b0764', darkText: '#d8b4fe', darkBorder: '#9333ea' },
+  'bg-pink-500':    { bg: '#fce7f3', text: '#9d174d', border: '#f9a8d4', darkBg: '#500724', darkText: '#f9a8d4', darkBorder: '#ec4899' },
+  'bg-orange-500':  { bg: '#ffedd5', text: '#9a3412', border: '#fdba74', darkBg: '#431407', darkText: '#fdba74', darkBorder: '#f97316' },
+  'bg-teal-500':    { bg: '#ccfbf1', text: '#134e4a', border: '#5eead4', darkBg: '#042f2e', darkText: '#5eead4', darkBorder: '#14b8a6' },
+  'bg-indigo-500':  { bg: '#e0e7ff', text: '#3730a3', border: '#a5b4fc', darkBg: '#1e1b4b', darkText: '#a5b4fc', darkBorder: '#6366f1' },
+  'bg-cyan-500':    { bg: '#cffafe', text: '#164e63', border: '#67e8f9', darkBg: '#083344', darkText: '#67e8f9', darkBorder: '#06b6d4' },
+  'bg-rose-500':    { bg: '#ffe4e6', text: '#9f1239', border: '#fda4af', darkBg: '#4c0519', darkText: '#fda4af', darkBorder: '#f43f5e' },
+  'bg-violet-500':  { bg: '#ede9fe', text: '#5b21b6', border: '#c4b5fd', darkBg: '#2e1065', darkText: '#c4b5fd', darkBorder: '#8b5cf6' },
+  'bg-lime-500':    { bg: '#ecfccb', text: '#365314', border: '#bef264', darkBg: '#1a2e05', darkText: '#bef264', darkBorder: '#84cc16' },
+  'bg-amber-500':   { bg: '#fef3c7', text: '#92400e', border: '#fcd34d', darkBg: '#451a03', darkText: '#fcd34d', darkBorder: '#f59e0b' },
+  'bg-sky-500':     { bg: '#e0f2fe', text: '#0c4a6e', border: '#7dd3fc', darkBg: '#082f49', darkText: '#7dd3fc', darkBorder: '#0ea5e9' },
+  'bg-emerald-500': { bg: '#d1fae5', text: '#065f46', border: '#6ee7b7', darkBg: '#022c22', darkText: '#6ee7b7', darkBorder: '#10b981' },
+  'bg-fuchsia-500': { bg: '#fae8ff', text: '#86198f', border: '#f0abfc', darkBg: '#4a044e', darkText: '#f0abfc', darkBorder: '#d946ef' },
+  'bg-slate-500':   { bg: '#f1f5f9', text: '#334155', border: '#cbd5e1', darkBg: '#1e293b', darkText: '#94a3b8', darkBorder: '#475569' },
+  'bg-gray-500':    { bg: '#f9fafb', text: '#374151', border: '#d1d5db', darkBg: '#1f2937', darkText: '#9ca3af', darkBorder: '#6b7280' },
+};
+
+function getChipStyle(colorClass: string) {
+  const entry = COLOR_MAP[colorClass];
+  if (entry) return entry;
+  return COLOR_MAP['bg-slate-500'];
+}
+
+type EventChipProps = {
+  color: string;
+  title: string;
+  isMultiDay: boolean;
+  showArrow?: boolean;
+};
+
+function EventChip({ color, title, isMultiDay, showArrow }: EventChipProps) {
+  const style = getChipStyle(color);
+  return (
+    <div
+      className="w-full h-full flex items-center overflow-hidden whitespace-nowrap px-1.5 text-[11px] font-medium rounded-[3px] transition-opacity hover:opacity-90
+        [.dark_&]:!bg-[var(--chip-dark-bg)] [.dark_&]:!text-[var(--chip-dark-text)] [.dark_&]:![border-left-color:var(--chip-dark-border)]"
+      style={{
+        backgroundColor: style.bg,
+        color: style.text,
+        borderLeft: isMultiDay ? `3px solid ${style.border}` : `2px solid ${style.border}`,
+        lineHeight: '20px',
+        '--chip-dark-bg': style.darkBg,
+        '--chip-dark-text': style.darkText,
+        '--chip-dark-border': style.darkBorder,
+      } as React.CSSProperties}
+    >
+      <span className="truncate">
+        {showArrow ? `← ${title}` : title}
+      </span>
+    </div>
+  );
+}
+
 /* ===== Props ===== */
 type Props = {
   events: CalendarEvent[];
@@ -280,23 +339,33 @@ export function Calendar({
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
 
-  /* 4) 스크롤로 월 동적 추가 - useTransition으로 최적화 */
+  // displayMonths를 ref로도 추적 (handleScroll 클로저 의존 제거)
+  const displayMonthsRef = useRef<Date[]>([]);
+  useEffect(() => {
+    displayMonthsRef.current = displayMonths;
+  }, [displayMonths]);
+
+  const onMonthChangeRef = useRef(onMonthChange);
+  useEffect(() => {
+    onMonthChangeRef.current = onMonthChange;
+  }, [onMonthChange]);
+
+  /* 4) 스크롤로 월 동적 추가 - ref 기반으로 클로저 의존 제거 */
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
-      if (isUpdatingScrollRef.current) {
-        return;
-      }
+      if (isUpdatingScrollRef.current) return;
 
       const container = e.currentTarget;
       const scrollTop = container.scrollTop;
+      const months = displayMonthsRef.current;
 
-      if (displayMonths.length === 0) return;
+      if (months.length === 0) return;
 
       // 상단 가까우면 이전 달 추가
       if (scrollTop < 120) {
         isUpdatingScrollRef.current = true;
 
-        const first = displayMonths[0];
+        const first = months[0];
         const toAdd: Date[] = [];
         for (let i = LOAD_CHUNK; i >= 1; i--) {
           toAdd.push(addMonths(first, -i));
@@ -309,12 +378,11 @@ export function Calendar({
             const filtered = filterDuplicateMonths(prev, toAdd);
             if (filtered.length === 0) return prev;
             const newMonths = [...filtered, ...prev];
-            onMonthChange?.(newMonths);
+            onMonthChangeRef.current?.(newMonths);
             return newMonths;
           });
         });
 
-        // DOM 업데이트 후 스크롤 위치 보정
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             const newScrollHeight = container.scrollHeight;
@@ -328,7 +396,7 @@ export function Calendar({
       // 하단 가까우면 다음 달 추가
       const { scrollHeight, clientHeight } = container;
       if (scrollTop + clientHeight > scrollHeight - 200) {
-        const last = displayMonths[displayMonths.length - 1];
+        const last = months[months.length - 1];
         const toAdd: Date[] = [];
         for (let i = 1; i <= LOAD_CHUNK; i++) {
           toAdd.push(addMonths(last, i));
@@ -338,13 +406,13 @@ export function Calendar({
             const filtered = filterDuplicateMonths(prev, toAdd);
             if (filtered.length === 0) return prev;
             const newMonths = [...prev, ...filtered];
-            onMonthChange?.(newMonths);
+            onMonthChangeRef.current?.(newMonths);
             return newMonths;
           });
         });
       }
     },
-    [displayMonths, onMonthChange]
+    [] // 의존성 없음 - 모두 ref로 접근
   );
 
   /* 5) 드래그 범위 체크 */
@@ -539,6 +607,14 @@ export function Calendar({
     )}`;
 
   const MAX_VISIBLE_EVENTS = 3;
+  // 노션 스타일 슬롯 상수
+  const DATE_HEADER_H = 32;   // 날짜 숫자 영역 높이 (px)
+  const SLOT_H = 20;           // 이벤트 바 하나 높이
+  const SLOT_GAP = 2;          // 바 사이 간격
+  const CELL_MIN_H = 140;      // 셀 최소 높이
+
+  // row → top 픽셀 (날짜 헤더 아래부터 시작)
+  const rowTop = (row: number) => DATE_HEADER_H + row * (SLOT_H + SLOT_GAP);
 
   /* 6) 월 렌더 - useMemo로 최적화 */
   const renderMonth = useCallback(
@@ -550,16 +626,16 @@ export function Calendar({
       const monthEvents = getEventsForMonth(date);
 
       return (
-        <Card
+        <div
           key={monthKey(date)}
           ref={(el) => {
             if (el) monthRefs.current.set(monthKey(date), el);
             else monthRefs.current.delete(monthKey(date));
           }}
-          className="overflow-hidden shadow-lg select-none mb-4"
+          className="select-none mb-8"
         >
           {/* 헤더 */}
-          <div className="flex items-center justify-between bg-gradient-to-r from-primary/10 to-primary/5 p-4">
+          <div className="flex items-center justify-between px-1 py-3">
             {date.getMonth() === month && date.getFullYear() === year ? (
               <>
                 {!isMobile && (
@@ -567,13 +643,13 @@ export function Calendar({
                     variant="ghost"
                     size="icon"
                     onClick={prevMonth}
-                    className="hover:bg-primary/10"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
                     aria-label="prev"
                   >
-                    <ChevronLeft className="h-5 w-5" />
+                    <ChevronLeft className="h-4 w-4" />
                   </Button>
                 )}
-                <h2 className="text-lg font-bold text-foreground flex-1 text-center">
+                <h2 className="text-base font-semibold text-foreground flex-1 text-center">
                   {y}년 {m + 1}월
                 </h2>
                 {!isMobile && (
@@ -581,31 +657,31 @@ export function Calendar({
                     variant="ghost"
                     size="icon"
                     onClick={nextMonth}
-                    className="hover:bg-primary/10"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
                     aria-label="next"
                   >
-                    <ChevronRight className="h-5 w-5" />
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 )}
               </>
             ) : (
-              <h2 className="text-lg font-bold text-foreground flex-1 text-center">
+              <h2 className="text-base font-semibold text-muted-foreground flex-1 text-center">
                 {y}년 {m + 1}월
               </h2>
             )}
           </div>
 
-          <div className="p-4">
+          <div>
             {/* 요일 라벨 */}
-            <div className="mb-3 grid grid-cols-7 gap-1 text-center">
+            <div className="mb-0 grid grid-cols-7 text-center border-b border-border/40">
               {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
                 <div
                   key={day}
-                  className={`text-sm font-bold ${
+                  className={`text-xs font-medium py-2 ${
                     idx === 0
-                      ? 'text-red-500'
+                      ? 'text-red-400'
                       : idx === 6
-                      ? 'text-blue-500'
+                      ? 'text-blue-400'
                       : 'text-muted-foreground'
                   }`}
                 >
@@ -615,175 +691,240 @@ export function Calendar({
             </div>
 
             {/* 주 단위 렌더 */}
-            <div className="space-y-2">
+            <div className="border-l border-border/40">
               {grid.map((week, weekIdx) => {
                 const firstValidDate = week.find((d) => d !== null);
                 const weekStart = firstValidDate
-                  ? startOfDay(
-                      addDays(firstValidDate, -firstValidDate.getDay())
-                    )
+                  ? startOfDay(addDays(firstValidDate, -firstValidDate.getDay()))
                   : new Date();
 
-                const eventToRow = assignRowsToMultiDayEvents(
-                  monthEvents,
-                  weekStart
+                // 멀티데이 이벤트 행 배정
+                const multiDayEventToRow = assignRowsToMultiDayEvents(monthEvents, weekStart);
+
+                // ── 통합 슬롯 배정 ──────────────────────────────────────
+                // 각 날짜(col 0~6)의 슬롯 점유 현황을 추적
+                // slot[col][row] = true면 사용 중
+                const slotOccupied: boolean[][] = Array.from({ length: 7 }, () =>
+                  Array(MAX_VISIBLE_EVENTS + 10).fill(false)
                 );
 
+                // 멀티데이 먼저 슬롯 점유
+                const multiDayBars: {
+                  evt: CalendarEvent;
+                  row: number;
+                  startCol: number;
+                  span: number;
+                  isWeekStart: boolean;
+                }[] = [];
+                multiDayEventToRow.forEach(({ row, event: evt, startCol, span }) => {
+                  if (row >= MAX_VISIBLE_EVENTS) return;
+                  for (let c = startCol; c < startCol + span && c < 7; c++) {
+                    slotOccupied[c][row] = true;
+                  }
+                  const isWeekStart =
+                    startCol === 0 &&
+                    startOfDay(new Date(evt.startDate)) < weekStart;
+                  multiDayBars.push({ evt, row, startCol, span, isWeekStart });
+                });
+
+                // 각 날짜별 싱글 이벤트 수집 (슬롯 빈 자리에 배정)
+                type SingleEvtEntry = {
+                  evt: CalendarEvent;
+                  col: number;
+                  row: number;
+                  isAllDay: boolean;
+                };
+                const singleEntries: SingleEvtEntry[] = [];
+
+                week.forEach((cellDate, colIdx) => {
+                  if (!cellDate) return;
+                  const cellStart = startOfDay(cellDate);
+                  const cellEnd = endOfDay(cellDate);
+
+                  // 싱글 종일 이벤트
+                  const singleAllDay = monthEvents.filter((evt) => {
+                    if (!evt.allDay || isMultiDayEvent(evt)) return false;
+                    return isSameDay(startOfDay(new Date(evt.startDate)), cellDate);
+                  });
+                  // 시간 이벤트
+                  const timedEvts = monthEvents
+                    .filter((evt) => {
+                      if (evt.allDay) return false;
+                      const s = new Date(evt.startDate);
+                      const e = new Date(evt.endDate);
+                      return (
+                        (s >= cellStart && s <= cellEnd) ||
+                        (e >= cellStart && e <= cellEnd) ||
+                        (s <= cellStart && e >= cellEnd)
+                      );
+                    })
+                    .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+
+                  [...singleAllDay, ...timedEvts].forEach((evt) => {
+                    // 이 col에서 비어있는 첫 번째 row 찾기
+                    let assignedRow = -1;
+                    for (let r = 0; r < MAX_VISIBLE_EVENTS; r++) {
+                      if (!slotOccupied[colIdx][r]) {
+                        assignedRow = r;
+                        slotOccupied[colIdx][r] = true;
+                        break;
+                      }
+                    }
+                    if (assignedRow === -1) return; // MAX 초과 → 숨김
+                    singleEntries.push({
+                      evt,
+                      col: colIdx,
+                      row: assignedRow,
+                      isAllDay: !!evt.allDay,
+                    });
+                  });
+                });
+
+                // 각 날짜별 hidden count 계산
+                const hiddenByCol: number[] = Array(7).fill(0);
+                week.forEach((cellDate, colIdx) => {
+                  if (!cellDate) return;
+                  const cellStart = startOfDay(cellDate);
+                  const cellEnd = endOfDay(cellDate);
+
+                  const multiOnDate = monthEvents.filter((evt) => {
+                    if (!isMultiDayEvent(evt)) return false;
+                    const s = startOfDay(new Date(evt.startDate));
+                    const e = startOfDay(new Date(evt.endDate));
+                    return cellStart >= s && cellStart <= e;
+                  });
+                  const singleAllDayOnDate = monthEvents.filter((evt) => {
+                    if (!evt.allDay || isMultiDayEvent(evt)) return false;
+                    return isSameDay(startOfDay(new Date(evt.startDate)), cellDate);
+                  });
+                  const timedOnDate = monthEvents.filter((evt) => {
+                    if (evt.allDay) return false;
+                    const s = new Date(evt.startDate);
+                    const e = new Date(evt.endDate);
+                    return (
+                      (s >= cellStart && s <= cellEnd) ||
+                      (e >= cellStart && e <= cellEnd) ||
+                      (s <= cellStart && e >= cellEnd)
+                    );
+                  });
+                  const total = multiOnDate.length + singleAllDayOnDate.length + timedOnDate.length;
+                  const visible = slotOccupied[colIdx].filter(Boolean).length;
+                  hiddenByCol[colIdx] = Math.max(0, total - visible);
+                });
+                // ────────────────────────────────────────────────────────
+
                 return (
-                  <div key={`week-${weekIdx}`} className="relative">
-                    <div className="grid grid-cols-7 gap-1">
+                  <div key={`week-${weekIdx}`} className="relative overflow-visible">
+                    {/* ── 멀티데이 바 (week row 기준 absolute) ── */}
+                    {multiDayBars.map(({ evt, row, startCol, span, isWeekStart }) => (
+                      <div
+                        key={`bar-${evt.id}-${weekIdx}`}
+                        data-event-clickable
+                        className={`absolute z-10 cursor-pointer flex items-center overflow-hidden whitespace-nowrap
+                          ${isWeekStart ? 'rounded-l-none' : 'rounded-l-[3px]'}
+                          ${startCol + span >= 7 ? 'rounded-r-none' : 'rounded-r-[3px]'}
+                        `}
+                        style={{
+                          left: `calc(${(startCol / 7) * 100}% + ${isWeekStart ? 0 : 2}px)`,
+                          width: `calc(${(span / 7) * 100}% - ${isWeekStart ? 2 : (startCol + span >= 7 ? 2 : 4)}px)`,
+                          top: `${rowTop(row)}px`,
+                          height: `${SLOT_H}px`,
+                          backgroundColor: `var(--evt-${evt.color.replace(/^bg-/, '').replace(/-\d+$/, '')}, rgba(0,0,0,0.08))`,
+                        }}
+                        onClick={(e) => { e.stopPropagation(); onEventDoubleClick(evt); }}
+                        title={evt.title}
+                      >
+                        <EventChip color={evt.color} title={evt.title} isMultiDay showArrow={isWeekStart} />
+                      </div>
+                    ))}
+
+                    {/* ── 싱글 이벤트 (셀 col 기준 absolute) ── */}
+                    {singleEntries.map(({ evt, col, row, isAllDay }) => (
+                      <div
+                        key={`single-${evt.id}-${col}`}
+                        data-event-clickable
+                        className="absolute z-10 cursor-pointer rounded-[3px] overflow-hidden"
+                        style={{
+                          left: `calc(${(col / 7) * 100}% + 2px)`,
+                          width: `calc(${(1 / 7) * 100}% - 4px)`,
+                          top: `${rowTop(row)}px`,
+                          height: `${SLOT_H}px`,
+                        }}
+                        onClick={(e) => { e.stopPropagation(); onEventDoubleClick(evt); }}
+                        title={evt.title}
+                      >
+                        <EventChip
+                          color={evt.color}
+                          title={isAllDay ? evt.title : `${fmtTime(evt.startDate)} ${evt.title}`}
+                          isMultiDay={false}
+                        />
+                      </div>
+                    ))}
+
+                    {/* ── 날짜 셀 (클릭/드래그 영역) ── */}
+                    <div className="grid grid-cols-7 border-t border-border/30">
                       {week.map((cellDate, colIdx) => {
-                        if (!cellDate) return <div key={`empty-${colIdx}`} />;
-
-                        const now = new Date();
-                        const today = isSameDay(cellDate, now);
-                        const inDrag = isDateInDragRange(cellDate);
-
-                        const cellStart = startOfDay(cellDate);
-                        const cellEnd = endOfDay(cellDate);
-
-                        const multiDayEventsForCell: {
-                          event: CalendarEvent;
-                          row: number;
-                          startCol: number;
-                          span: number;
-                          isWeekStart: boolean;
-                        }[] = [];
-
-                        eventToRow.forEach(({ row, event, startCol, span }) => {
-                          if (startCol === colIdx) {
-                            const eventStart = startOfDay(
-                              new Date(event.startDate)
-                            );
-                            const isWeekStart =
-                              colIdx === 0 && eventStart < weekStart;
-                            multiDayEventsForCell.push({
-                              event,
-                              row,
-                              startCol,
-                              span,
-                              isWeekStart,
-                            });
-                          }
-                        });
-
-                        const singleDayAllDayEvents = monthEvents.filter(
-                          (evt: CalendarEvent) => {
-                            if (!evt.allDay || isMultiDayEvent(evt))
-                              return false;
-                            const s = startOfDay(new Date(evt.startDate));
-                            return isSameDay(s, cellDate);
-                          }
-                        );
-
-                        const timedSingles = monthEvents
-                          .filter((evt: CalendarEvent) => {
-                            if (evt.allDay) return false;
-                            const s = startOfDay(new Date(evt.startDate));
-                            const e = new Date(evt.endDate);
-                            return (
-                              isSameDay(s, cellDate) && isSameDay(e, cellDate)
-                            );
-                          })
-                          .sort(
-                            (a, b) =>
-                              a.startDate.getTime() - b.startDate.getTime()
+                        if (!cellDate)
+                          return (
+                            <div
+                              key={`empty-${colIdx}`}
+                              style={{ minHeight: CELL_MIN_H }}
+                              className="border-b border-r border-border/30 bg-muted/10"
+                            />
                           );
 
-                        const multiDayEventsOnThisDate =
-                          getMultiDayEventsForDate(monthEvents, cellDate);
+                        const today = isSameDay(cellDate, new Date());
+                        const inDrag = isDateInDragRange(cellDate);
+                        const hidden = hiddenByCol[colIdx];
 
-                        const allDayEventsForDate = [
-                          ...multiDayEventsOnThisDate,
-                          ...singleDayAllDayEvents,
-                          ...timedSingles,
+                        // 이 셀의 모든 이벤트 (더보기 모달용)
+                        const cellStart = startOfDay(cellDate);
+                        const cellEnd = endOfDay(cellDate);
+                        const allEventsForCell = [
+                          ...monthEvents.filter((evt) => {
+                            if (!isMultiDayEvent(evt)) return false;
+                            const s = startOfDay(new Date(evt.startDate));
+                            const e = startOfDay(new Date(evt.endDate));
+                            return cellStart >= s && cellStart <= e;
+                          }),
+                          ...monthEvents.filter((evt) => {
+                            if (!evt.allDay || isMultiDayEvent(evt)) return false;
+                            return isSameDay(startOfDay(new Date(evt.startDate)), cellDate);
+                          }),
+                          ...monthEvents.filter((evt) => {
+                            if (evt.allDay) return false;
+                            const s = new Date(evt.startDate);
+                            const e = new Date(evt.endDate);
+                            return (
+                              (s >= cellStart && s <= cellEnd) ||
+                              (e >= cellStart && e <= cellEnd) ||
+                              (s <= cellStart && e >= cellEnd)
+                            );
+                          }),
                         ];
-
-                        const visibleMultiDayCount =
-                          multiDayEventsForCell.filter(
-                            (m) => m.row < MAX_VISIBLE_EVENTS
-                          ).length;
-
-                        const multiDayEventsRenderedElsewhere =
-                          multiDayEventsOnThisDate.filter((evt) => {
-                            const isRenderedInThisCell =
-                              multiDayEventsForCell.some(
-                                (m) =>
-                                  m.event.id === evt.id &&
-                                  m.row < MAX_VISIBLE_EVENTS
-                              );
-                            if (isRenderedInThisCell) return false;
-
-                            let isVisibleInRow = false;
-                            eventToRow.forEach(({ event, row }) => {
-                              if (
-                                event.id === evt.id &&
-                                row < MAX_VISIBLE_EVENTS
-                              ) {
-                                isVisibleInRow = true;
-                              }
-                            });
-                            return isVisibleInRow;
-                          }).length;
-
-                        const totalVisibleMultiDay =
-                          visibleMultiDayCount +
-                          multiDayEventsRenderedElsewhere;
-
-                        const remainingSpace = Math.max(
-                          0,
-                          MAX_VISIBLE_EVENTS - totalVisibleMultiDay
-                        );
-                        const visibleSingleDay = Math.min(
-                          singleDayAllDayEvents.length,
-                          remainingSpace
-                        );
-                        const remainingSpace2 = Math.max(
-                          0,
-                          remainingSpace - visibleSingleDay
-                        );
-                        const visibleTimed = Math.min(
-                          timedSingles.length,
-                          remainingSpace2
-                        );
-
-                        const totalEventsOnDate =
-                          multiDayEventsOnThisDate.length +
-                          singleDayAllDayEvents.length +
-                          timedSingles.length;
-                        const totalVisibleOnDate =
-                          totalVisibleMultiDay +
-                          visibleSingleDay +
-                          visibleTimed;
-                        const hiddenCount =
-                          totalEventsOnDate - totalVisibleOnDate;
 
                         return (
                           <div
                             key={cellDate.getTime()}
-                            className={`relative min-h-[120px] cursor-pointer rounded-lg p-2 transition-all duration-200 ${
-                              inDrag
-                                ? 'bg-primary/20 shadow-sm'
-                                : 'bg-card/50 hover:bg-accent/50 hover:shadow-md'
-                            } ${
-                              today
-                                ? 'ring-2 ring-primary ring-offset-1 bg-primary/5'
-                                : ''
+                            className={`relative border-b border-r border-border/30 transition-colors duration-100 ${
+                              inDrag ? 'bg-primary/8' : 'hover:bg-accent/30'
                             }`}
-                            onPointerDown={(e) =>
-                              handlePointerDown(cellDate, e)
-                            }
+                            style={{ minHeight: CELL_MIN_H }}
+                            onPointerDown={(e) => handlePointerDown(cellDate, e)}
                             onPointerMove={() => handlePointerMove(cellDate)}
                             onPointerUp={(e) => handlePointerUp(cellDate, e)}
                           >
-                            <div className="flex items-start justify-between">
+                            {/* 날짜 숫자 */}
+                            <div className="flex items-center justify-between px-1.5 pt-1.5 pb-1" style={{ height: DATE_HEADER_H }}>
                               <span
-                                className={`text-sm font-medium ${
-                                  colIdx === 0
-                                    ? 'text-red-500'
+                                className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full flex-shrink-0 ${
+                                  today
+                                    ? 'bg-primary text-primary-foreground font-bold'
+                                    : colIdx === 0
+                                    ? 'text-red-400'
                                     : colIdx === 6
-                                    ? 'text-blue-500'
-                                    : ''
+                                    ? 'text-blue-400'
+                                    : 'text-foreground/70'
                                 }`}
                               >
                                 {cellDate.getDate()}
@@ -791,185 +932,44 @@ export function Calendar({
                               {onCreateNewEvent && (
                                 <button
                                   data-event-clickable
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onCreateNewEvent(cellDate);
-                                  }}
-                                  className="opacity-0 group-hover:opacity-100 hover:opacity-100 focus:opacity-100 p-0.5 rounded hover:bg-accent transition-opacity"
+                                  onClick={(e) => { e.stopPropagation(); onCreateNewEvent(cellDate); }}
+                                  className="opacity-0 hover:opacity-100 focus:opacity-100 p-0.5 rounded hover:bg-accent transition-opacity"
                                 >
                                   <Plus className="w-3 h-3 text-muted-foreground" />
                                 </button>
                               )}
                             </div>
 
-                            {isMobile && allDayEventsForDate.length > 0 ? (
-                              <div className="flex flex-wrap gap-0.5 mt-1">
-                                {allDayEventsForDate
-                                  .slice(0, 6)
-                                  .map((evt, idx) => (
-                                    <div
-                                      key={`dot-${evt.id}-${idx}`}
-                                      className={`w-1.5 h-1.5 rounded-full ${evt.color}`}
-                                      title={evt.title}
-                                    />
-                                  ))}
-                                {allDayEventsForDate.length > 6 && (
-                                  <div className="text-[10px] text-muted-foreground ml-1">
-                                    +{allDayEventsForDate.length - 6}
-                                  </div>
+                            {/* 모바일 점 표시 */}
+                            {isMobile && allEventsForCell.length > 0 && (
+                              <div className="flex flex-wrap gap-0.5 px-1.5 mt-0.5">
+                                {allEventsForCell.slice(0, 5).map((evt, idx) => (
+                                  <div
+                                    key={`dot-${evt.id}-${idx}`}
+                                    className={`w-1.5 h-1.5 rounded-full ${evt.color}`}
+                                  />
+                                ))}
+                                {allEventsForCell.length > 5 && (
+                                  <span className="text-[9px] text-muted-foreground">+{allEventsForCell.length - 5}</span>
                                 )}
                               </div>
-                            ) : (
-                              <>
-                                {multiDayEventsForCell
-                                  .filter((m) => m.row < MAX_VISIBLE_EVENTS)
-                                  .map(
-                                    ({
-                                      event: evt,
-                                      row,
-                                      span,
-                                      isWeekStart,
-                                    }) => {
-                                      const widthPercent = span * 100;
-                                      const gapAdjustment = (span - 1) * 4;
-                                      const topPosition = 32 + row * 22;
+                            )}
 
-                                      return (
-                                        <div
-                                          key={`multi-${
-                                            evt.id
-                                          }-${cellDate.getTime()}`}
-                                          data-event-clickable
-                                          className={`${
-                                            evt.color
-                                          } absolute left-2 right-[-4px] ${
-                                            isWeekStart
-                                              ? 'rounded-l-none'
-                                              : 'rounded-l-md'
-                                          } rounded-r-md px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-sm transition-transform hover:scale-105 cursor-pointer z-10 flex items-center overflow-hidden whitespace-nowrap`}
-                                          style={{
-                                            width: `calc(${widthPercent}% + ${gapAdjustment}px)`,
-                                            top: `${topPosition}px`,
-                                          }}
-                                          onClick={(
-                                            e: React.MouseEvent<HTMLDivElement>
-                                          ) => {
-                                            e.stopPropagation();
-                                            onEventDoubleClick(evt);
-                                          }}
-                                          title={`${evt.title}\n${new Date(
-                                            evt.startDate
-                                          ).toLocaleDateString()} ~ ${new Date(
-                                            evt.endDate
-                                          ).toLocaleDateString()}`}
-                                        >
-                                          <span className="truncate">
-                                            {isWeekStart
-                                              ? `← ${evt.title}`
-                                              : evt.title}
-                                          </span>
-                                        </div>
-                                      );
-                                    }
-                                  )}
-
-                                {visibleSingleDay > 0 && (
-                                  <div
-                                    style={{
-                                      marginTop: `${
-                                        totalVisibleMultiDay * 22 + 4
-                                      }px`,
-                                    }}
-                                    className="space-y-0.5"
-                                  >
-                                    {singleDayAllDayEvents
-                                      .slice(0, visibleSingleDay)
-                                      .map((evt) => (
-                                        <div
-                                          key={`allday-${evt.id}`}
-                                          data-event-clickable
-                                          className={`${evt.color} cursor-pointer truncate rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-white shadow-sm transition-transform hover:scale-105`}
-                                          onClick={(
-                                            e: React.MouseEvent<HTMLDivElement>
-                                          ) => {
-                                            e.stopPropagation();
-                                            onEventDoubleClick(evt);
-                                          }}
-                                          title={`${evt.title} (종일)`}
-                                        >
-                                          {evt.title}
-                                        </div>
-                                      ))}
-                                  </div>
-                                )}
-
-                                {visibleTimed > 0 && (
-                                  <div
-                                    className="space-y-0.5"
-                                    style={{
-                                      marginTop:
-                                        visibleSingleDay > 0
-                                          ? '4px'
-                                          : `${
-                                              totalVisibleMultiDay * 22 + 4
-                                            }px`,
-                                    }}
-                                  >
-                                    {timedSingles
-                                      .slice(0, visibleTimed)
-                                      .map((evt) => (
-                                        <div
-                                          key={`timed-${evt.id}`}
-                                          data-event-clickable
-                                          className={`cursor-pointer truncate rounded-md px-1.5 py-0.5 text-[11px] font-medium text-foreground bg-muted hover:bg-muted/70 transition-colors`}
-                                          onClick={(
-                                            e: React.MouseEvent<HTMLDivElement>
-                                          ) => {
-                                            e.stopPropagation();
-                                            onEventDoubleClick(evt);
-                                          }}
-                                          title={`${fmtTime(evt.startDate)} ${
-                                            evt.title
-                                          }`}
-                                        >
-                                          <span
-                                            className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
-                                            style={{
-                                              background: 'currentColor',
-                                            }}
-                                          />
-                                          <span className="align-middle text-xs font-semibold text-muted-foreground">
-                                            {fmtTime(evt.startDate)}
-                                          </span>{' '}
-                                          <span className="align-middle">
-                                            {evt.title}
-                                          </span>
-                                        </div>
-                                      ))}
-                                  </div>
-                                )}
-
-                                {hiddenCount > 0 && (
-                                  <div
-                                    data-event-clickable
-                                    className="text-[11px] text-muted-foreground px-1.5 cursor-pointer hover:text-foreground hover:bg-accent/50 rounded transition-colors mt-1"
-                                    style={{
-                                      marginTop: `${Math.max(
-                                        totalVisibleMultiDay * 22 + 4,
-                                        36
-                                      )}px`,
-                                    }}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDayModalDate(cellDate);
-                                      setDayModalEvents(allDayEventsForDate);
-                                      setShowDayModal(true);
-                                    }}
-                                  >
-                                    +{hiddenCount}개 더보기
-                                  </div>
-                                )}
-                              </>
+                            {/* +N개 더보기 */}
+                            {!isMobile && hidden > 0 && (
+                              <div
+                                data-event-clickable
+                                className="absolute text-[10px] text-muted-foreground/70 hover:text-foreground cursor-pointer transition-colors px-1.5"
+                                style={{ top: `${rowTop(MAX_VISIBLE_EVENTS) + 2}px` }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDayModalDate(cellDate);
+                                  setDayModalEvents(allEventsForCell);
+                                  setShowDayModal(true);
+                                }}
+                              >
+                                +{hidden}개
+                              </div>
                             )}
                           </div>
                         );
@@ -980,7 +980,7 @@ export function Calendar({
               })}
             </div>
           </div>
-        </Card>
+        </div>
       );
     },
     [

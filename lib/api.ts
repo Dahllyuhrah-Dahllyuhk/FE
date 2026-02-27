@@ -133,7 +133,6 @@ export async function addFriendByCode(code: string): Promise<FriendDto> {
   if (res.status === 409) throw new Error('이미 친구입니다.');
   throw new Error(msg || '알 수 없는 오류');
 }
-
 export async function deleteFriend(friendId: string): Promise<void> {
   await apiFetch(`/api/friends/${friendId}`, { method: 'DELETE' });
 }

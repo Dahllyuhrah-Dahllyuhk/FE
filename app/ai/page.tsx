@@ -4,23 +4,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/protected-route';
 import { BottomNav } from '@/components/bottom-nav';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
-  Send,
-  Bot,
-  User,
-  Sparkles,
-  Mic,
-  MicOff,
-  Calendar as CalendarIcon,
-  Clock,
-  MapPin,
-  Users,
-  CheckCircle,
-  ChevronRight,
+  Send, Bot, User, Sparkles, Mic, MicOff,
+  Calendar as CalendarIcon, Clock, MapPin, Users, CheckCircle,
 } from 'lucide-react';
 import { API_BASE } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
@@ -55,56 +41,51 @@ const BE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';
 const ScheduleCard = ({ data }: { data: any }) => {
   const router = useRouter();
   const events = Array.isArray(data) ? data : [data];
-
   if (events.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-2 w-full max-w-[280px] sm:max-w-sm mt-1">
+    <div className="flex flex-col gap-2 w-full mt-1.5">
       {events.map((evt: any, idx: number) => {
-        // 날짜 데이터 추출 및 유효성 검사
         const startVal = evt.start || evt.startTimestamp;
         const endVal = evt.end || evt.endTimestamp;
-        
         const startDate = startVal ? new Date(startVal) : null;
         const endDate = endVal ? new Date(endVal) : null;
-        
-        // 날짜가 유효하지 않으면(Invalid Date) 렌더링하지 않음
         if (!startDate || isNaN(startDate.getTime())) return null;
-        
         const isAllDay = evt.allDay;
 
         return (
-          <Card 
-            key={evt.id || idx} 
+          <div
+            key={evt.id || idx}
             onClick={() => router.push('/')}
-            className="border-l-4 overflow-hidden shadow-sm cursor-pointer hover:bg-accent/50 transition-colors active:scale-95 duration-200"
-            style={{ borderLeftColor: evt.color || '#3b82f6' }}
+            className="notion-card notion-card-hover cursor-pointer overflow-hidden"
+            style={{ borderLeft: `3px solid ${evt.color || '#6366f1'}` }}
           >
-            <CardContent className="p-3">
-              <div className="flex justify-between items-center mb-1">
-                <h4 className="font-bold text-sm truncate flex-1 pr-2">{evt.title || evt.summary || '제목 없음'}</h4>
-                {isAllDay && <Badge variant="secondary" className="text-[10px] px-1 shrink-0">종일</Badge>}
+            <div className="p-3">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <p className="text-xs font-semibold text-foreground truncate">{evt.title || evt.summary || '제목 없음'}</p>
+                {isAllDay && (
+                  <span className="text-[10px] px-1.5 py-px rounded bg-accent text-muted-foreground flex-shrink-0">종일</span>
+                )}
               </div>
-              <div className="text-xs text-muted-foreground space-y-1">
-                {evt.description && <p className="line-clamp-1">{evt.description}</p>}
+              <div className="space-y-0.5 text-[11px] text-muted-foreground">
+                {evt.description && <p className="truncate">{evt.description}</p>}
                 <div className="flex items-center gap-1">
-                  <CalendarIcon className="w-3 h-3 shrink-0" />
+                  <CalendarIcon className="h-3 w-3 flex-shrink-0" />
                   <span>
                     {format(startDate, 'M월 d일 (E)', { locale: ko })}
-                    {!isAllDay && endDate && !isNaN(endDate.getTime()) && 
-                      ` ${format(startDate, 'HH:mm')} ~ ${format(endDate, 'HH:mm')}`
-                    }
+                    {!isAllDay && endDate && !isNaN(endDate.getTime()) &&
+                      ` · ${format(startDate, 'HH:mm')} ~ ${format(endDate, 'HH:mm')}`}
                   </span>
                 </div>
                 {evt.location && (
                   <div className="flex items-center gap-1">
-                    <MapPin className="w-3 h-3 shrink-0" />
+                    <MapPin className="h-3 w-3 flex-shrink-0" />
                     <span className="truncate">{evt.location}</span>
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         );
       })}
     </div>
@@ -115,68 +96,56 @@ const ScheduleCard = ({ data }: { data: any }) => {
 const MeetingCard = ({ data }: { data: any }) => {
   const router = useRouter();
   const meetings = Array.isArray(data) ? data : [data];
-
   if (meetings.length === 0) return null;
 
+  const statusConfig: Record<string, { label: string; color: string }> = {
+    PENDING:   { label: '조율 중',  color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+    CONFIRMED: { label: '확정됨',  color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+    CLOSED:    { label: '종료됨',  color: 'bg-accent text-muted-foreground' },
+  };
+
   return (
-    <div className="flex flex-col gap-2 w-full max-w-[280px] sm:max-w-sm mt-1">
+    <div className="flex flex-col gap-2 w-full mt-1.5">
       {meetings.map((meeting: any, idx: number) => {
         const req = meeting.requirement || {};
-        const startStr = req.dateRangeStart || '미정';
-        const endStr = req.dateRangeEnd || '미정';
-        
-        const statusLabels: Record<string, string> = {
-          PENDING: '조율 중',
-          CONFIRMED: '확정됨',
-          CLOSED: '종료됨'
-        };
-
-        // 확정 날짜 유효성 검사
         const confirmedDate = meeting.confirmedStart ? new Date(meeting.confirmedStart) : null;
         const isValidConfirmed = confirmedDate && !isNaN(confirmedDate.getTime());
+        const cfg = statusConfig[meeting.status] ?? { label: meeting.status, color: 'bg-accent text-muted-foreground' };
 
         return (
-          <Card 
-            key={meeting.id || idx} 
+          <div
+            key={meeting.id || idx}
             onClick={() => router.push(`/meetings/${meeting.id}`)}
-            className="bg-card shadow-sm cursor-pointer hover:bg-accent/50 transition-all active:scale-95 duration-200 group"
+            className="notion-card notion-card-hover cursor-pointer p-3"
           >
-            <CardContent className="p-3">
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-1 overflow-hidden">
-                  <h4 className="font-bold text-sm truncate">{meeting.name}</h4>
-                  <ChevronRight className="w-3 h-3 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />
-                </div>
-                <Badge variant={meeting.status === 'CONFIRMED' ? 'default' : 'outline'} className="text-[10px] px-1 shrink-0">
-                  {statusLabels[meeting.status] || meeting.status}
-                </Badge>
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <p className="text-xs font-semibold text-foreground truncate">{meeting.name}</p>
+              <span className={`text-[10px] font-medium px-1.5 py-px rounded flex-shrink-0 ${cfg.color}`}>
+                {cfg.label}
+              </span>
+            </div>
+            <div className="space-y-1 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <CalendarIcon className="h-3 w-3 flex-shrink-0" />
+                <span>{req.dateRangeStart ?? '미정'} ~ {req.dateRangeEnd ?? '미정'}</span>
               </div>
-              
-              <div className="text-xs text-muted-foreground space-y-1.5">
-                <div className="flex items-center gap-1.5">
-                  <CalendarIcon className="w-3.5 h-3.5 shrink-0" />
-                  <span>{startStr} ~ {endStr}</span>
+              {isValidConfirmed ? (
+                <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 font-medium">
+                  <CheckCircle className="h-3 w-3 flex-shrink-0" />
+                  <span>확정: {format(confirmedDate!, 'M/d HH:mm')}</span>
                 </div>
-                
-                {isValidConfirmed ? (
-                   <div className="flex items-center gap-1.5 text-green-600 font-medium">
-                     <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                     <span>확정: {format(confirmedDate!, 'M/d HH:mm')}</span>
-                   </div>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 shrink-0" />
-                    <span>시간 조율 필요</span>
-                  </div>
-                )}
-
+              ) : (
                 <div className="flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 shrink-0" />
-                  <span>참여자 {meeting.participants?.length || 0}명</span>
+                  <Clock className="h-3 w-3 flex-shrink-0" />
+                  <span>시간 조율 필요</span>
                 </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <Users className="h-3 w-3 flex-shrink-0" />
+                <span>참여자 {meeting.participants?.length || 0}명</span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         );
       })}
     </div>
@@ -416,14 +385,15 @@ export default function AIPage() {
   return (
     <ProtectedRoute>
       <div className="flex min-h-screen flex-col bg-background pb-16">
-        <header className="border-b border-border bg-card px-4 py-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-purple-500">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">AI 어시스턴트</h1>
-              <p className="text-xs text-muted-foreground">음성으로 일정 관리하기</p>
+        <header className="page-header">
+          <div className="page-header-inner">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-violet-500">
+                <Sparkles className="h-3.5 w-3.5 text-white" />
+              </div>
+              <div>
+                <h1 className="page-title">AI 어시스턴트</h1>
+              </div>
             </div>
           </div>
         </header>
@@ -483,28 +453,35 @@ export default function AIPage() {
           </div>
         </main>
 
-        <div className="border-t border-border bg-card p-4">
-          <div className="flex gap-2">
-            <Button
-              variant={isListening ? "destructive" : "outline"}
-              size="icon"
+        <div className="border-t border-border/40 bg-background/95 backdrop-blur-sm px-3 py-3 pb-safe">
+          <div className="flex gap-2 items-center">
+            <button
               onClick={toggleListening}
-              className={`transition-all ${isListening ? 'animate-pulse ring-2 ring-destructive/30' : ''}`}
+              className={`flex items-center justify-center w-9 h-9 rounded-xl transition-all flex-shrink-0 ${
+                isListening
+                  ? 'bg-destructive text-destructive-foreground animate-pulse'
+                  : 'bg-accent text-muted-foreground hover:text-foreground'
+              }`}
             >
               {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </Button>
+            </button>
 
-            <Input
+            <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
-              placeholder="메시지 입력 또는 음성 대화..."
-              className="flex-1"
+              placeholder="메시지를 입력하세요..."
               disabled={isTyping}
+              className="flex-1 px-3 py-2 text-sm bg-accent/40 rounded-xl border border-transparent outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 disabled:opacity-50 transition-all"
             />
-            <Button onClick={handleSend} size="icon" disabled={isTyping || !input.trim()}>
+
+            <button
+              onClick={handleSend}
+              disabled={isTyping || !input.trim()}
+              className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground disabled:opacity-30 hover:bg-primary/90 transition-all flex-shrink-0"
+            >
               <Send className="h-4 w-4" />
-            </Button>
+            </button>
           </div>
         </div>
 
