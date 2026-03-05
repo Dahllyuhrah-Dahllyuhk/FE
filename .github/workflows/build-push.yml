@@ -87,9 +87,10 @@ jobs:
 
             echo "FE 헬스체크 시작..."
             for i in $(seq 1 12); do
-              HTTP_STATUS=$(docker exec fe wget -qO- http://localhost:3000 2>/dev/null | head -1 || echo "")
+              RUNNING=$(docker inspect --format='{{.State.Running}}' fe 2>/dev/null || echo "false")
+              RESTARTING=$(docker inspect --format='{{.State.Restarting}}' fe 2>/dev/null || echo "true")
 
-              if [ -n "$HTTP_STATUS" ]; then
+              if [ "$RUNNING" = "true" ] && [ "$RESTARTING" = "false" ]; then
                 echo "FE 배포 성공 (attempt $i)"
                 break
               fi
