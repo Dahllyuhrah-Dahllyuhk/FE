@@ -87,47 +87,32 @@ jobs:
             echo "삭제: $DIGEST"
           done
 
-      # ── 7. EC2 배포 ──────────────────────────────────────────────────────
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host:     ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key:      ${{ secrets.DEPLOY_KEY }}
-          script: |
-            # ECR 로그인
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
-              | docker login --username AWS --password-stdin \
-                ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+      # ── 7. 배포 (runner가 EC2 내부에서 직접 실행) ───────────────────────
+      - name: Deploy
+        run: |
+          cd /home/ubuntu/matuabom
 
-            cd /home/ubuntu/matuabom
+          docker compose pull fe
+          docker compose up -d --no-deps --force-recreate fe
 
-            # 최신 이미지 pull
-            docker compose pull fe
+          echo "FE 헬스체크 시작..."
+          for i in $(seq 1 12); do
+            HTTP_STATUS=$(curl -sf -o /dev/null -w "%{http_code}" \
+              http://localhost:3000 2>/dev/null || echo "000")
 
-            # 무중단 재시작 (기존 컨테이너 유지 중 새 컨테이너 기동)
-            docker compose up -d --no-deps --force-recreate fe
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "307" ] || [ "$HTTP_STATUS" = "308" ]; then
+              echo "FE 배포 성공 (attempt $i, HTTP=$HTTP_STATUS)"
+              break
+            fi
 
-            # 헬스체크 (최대 60초 대기)
-            echo "FE 헬스체크 시작..."
-            for i in $(seq 1 12); do
-              STATUS=$(docker inspect --format='{{.State.Health.Status}}' fe 2>/dev/null || echo "none")
-              if [ "$STATUS" = "healthy" ] || [ "$STATUS" = "none" ]; then
-                # healthcheck 미설정 시 컨테이너 실행 상태로만 확인
-                RUNNING=$(docker inspect --format='{{.State.Running}}' fe 2>/dev/null || echo "false")
-                if [ "$RUNNING" = "true" ]; then
-                  echo "FE 배포 성공 (attempt $i)"
-                  break
-                fi
-              fi
-              if [ $i -eq 12 ]; then
-                echo "FE 헬스체크 실패 — 롤백 시도"
-                docker compose up -d --no-deps --force-recreate fe || true
-                exit 1
-              fi
-              echo "대기 중... ($i/12)"
-              sleep 5
-            done
+            if [ $i -eq 12 ]; then
+              echo "FE 헬스체크 실패 (HTTP=$HTTP_STATUS)"
+              docker compose logs --tail=30 fe
+              exit 1
+            fi
 
-            # 댕글링 이미지 정리
-            docker image prune -f
+            echo "대기 중... ($i/12, HTTP=$HTTP_STATUS)"
+            sleep 5
+          done
+
+          docker image prune -f
