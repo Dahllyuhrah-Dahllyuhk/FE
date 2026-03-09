@@ -263,3 +263,17 @@ export async function updateMeetingState(
   });
   return res.json();
 }
+
+export async function getMeetingInviteCode(meetingId: string): Promise<string> {
+  const res = await apiFetch(`/api/meetings/${meetingId}/invite-code`);
+  const data = await res.json();
+  return data.inviteCode as string;
+}
+
+export async function joinMeetingByCode(inviteCode: string): Promise<Meeting> {
+  const res = await apiFetch('/api/meetings/join', {
+    method: 'POST',
+    body: JSON.stringify({ inviteCode }),
+  });
+  return res.json();
+}

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeft, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import type { DateRange } from 'react-day-picker';
+import { DatePicker, DateRangePicker } from '@/components/ui/date-picker';
 import { ProtectedRoute } from '@/components/protected-route';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -71,8 +73,8 @@ export default function MeetingSettingsPage({
 
   // Host-only settings
   const [name, setName] = useState('');
-  const [dateRangeStart, setDateRangeStart] = useState('');
-  const [dateRangeEnd, setDateRangeEnd] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [confirmedDateObj, setConfirmedDateObj] = useState<Date | undefined>();
   const [isAllDay, setIsAllDay] = useState(false);
   const [selectedTimeSlots, setSelectedTimeSlots] = useState<number[]>([]);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
@@ -144,17 +146,15 @@ export default function MeetingSettingsPage({
         setMeetingStatus(meetingData.status);
 
         setName(meetingData.name);
-        setDateRangeStart(
-          format(new Date(meetingData.requirement.dateRangeStart), 'yyyy-MM-dd')
-        );
-        setDateRangeEnd(
-          format(new Date(meetingData.requirement.dateRangeEnd), 'yyyy-MM-dd')
-        );
+        const from = new Date(meetingData.requirement.dateRangeStart);
+        const to = new Date(meetingData.requirement.dateRangeEnd);
+        setDateRange({ from, to });
         setIsAllDay(meetingData.requirement.isAllDay);
 
         // 확정된 날짜/시간 설정
         if (meetingData.confirmedStart) {
           const confirmDate = new Date(meetingData.confirmedStart);
+          setConfirmedDateObj(confirmDate);
           setConfirmedDate(format(confirmDate, 'yyyy-MM-dd'));
           setConfirmedStartTime(format(confirmDate, 'HH:mm'));
         }
@@ -267,33 +267,32 @@ export default function MeetingSettingsPage({
   };
 
   const handleConfirmMeeting = async () => {
-    if (!confirmedDate || !confirmedStartTime || !confirmedEndTime) {
-      toast({
-        title: '입력 오류',
-        description: '날짜와 시간을 모두 선택해주세요.',
-        variant: 'destructive',
-      });
+    if (!confirmedDate) {
+      toast({ title: '입력 오류', description: '날짜를 선택해주세요.', variant: 'destructive' });
       return;
     }
+    let startDateTime: Date;
+    let endDateTime: Date;
 
-    const startDateTime = new Date(`${confirmedDate}T${confirmedStartTime}:00`);
-    const endDateTime = new Date(`${confirmedDate}T${confirmedEndTime}:00`);
-
-    if (endDateTime <= startDateTime) {
-      toast({
-        title: '입력 오류',
-        description: '종료 시간은 시작 시간 이후여야 합니다.',
-        variant: 'destructive',
-      });
-      return;
+    if (isAllDay) {
+      // 종일: 00:00 ~ 23:59
+      startDateTime = new Date(`${confirmedDate}T00:00:00`);
+      endDateTime = new Date(`${confirmedDate}T23:59:00`);
+    } else {
+      if (!confirmedStartTime || !confirmedEndTime) {
+        toast({ title: '입력 오류', description: '시간을 모두 선택해주세요.', variant: 'destructive' });
+        return;
+      }
+      startDateTime = new Date(`${confirmedDate}T${confirmedStartTime}:00`);
+      endDateTime = new Date(`${confirmedDate}T${confirmedEndTime}:00`);
+      if (endDateTime <= startDateTime) {
+        toast({ title: '입력 오류', description: '종료 시간은 시작 시간 이후여야 합니다.', variant: 'destructive' });
+        return;
+      }
     }
 
     setShowConfirmDialog(false);
-    await updateStatus(
-      'CONFIRMED',
-      startDateTime.toISOString(),
-      endDateTime.toISOString()
-    );
+    await updateStatus('CONFIRMED', startDateTime.toISOString(), endDateTime.toISOString());
   };
 
   const handleRevertToPending = async () => {
@@ -336,31 +335,21 @@ export default function MeetingSettingsPage({
 
       if (meeting.hostUserId === user.id) {
         if (!name.trim()) {
-          toast({
-            title: '입력 오류',
-            description: '모임 이름을 입력해주세요.',
-            variant: 'destructive',
-          });
+          toast({ title: '입력 오류', description: '모임 이름을 입력해주세요.', variant: 'destructive' });
           setIsSaving(false);
           return;
         }
-        if (!dateRangeStart || !dateRangeEnd) {
-          toast({
-            title: '입력 오류',
-            description: '날짜 범위를 선택해주세요.',
-            variant: 'destructive',
-          });
+        if (!dateRange?.from || !dateRange?.to) {
+          toast({ title: '입력 오류', description: '날짜 범위를 선택해주세요.', variant: 'destructive' });
           setIsSaving(false);
           return;
         }
 
-        const timeConstraints = isAllDay
-          ? []
-          : slotsToTimeConstraints(selectedTimeSlots);
+        const timeConstraints = isAllDay ? [] : slotsToTimeConstraints(selectedTimeSlots);
 
         const requirementPayload = {
-          dateRangeStart,
-          dateRangeEnd,
+          dateRangeStart: format(dateRange.from, 'yyyy-MM-dd'),
+          dateRangeEnd: format(dateRange.to, 'yyyy-MM-dd'),
           isAllDay,
           timeConstraints,
         };
@@ -577,38 +566,12 @@ export default function MeetingSettingsPage({
 
                     <div className="space-y-2">
                       <Label>후보 날짜 범위</Label>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label
-                            htmlFor="start"
-                            className="text-xs text-muted-foreground"
-                          >
-                            시작일
-                          </Label>
-                          <Input
-                            id="start"
-                            type="date"
-                            value={dateRangeStart}
-                            onChange={(e) => setDateRangeStart(e.target.value)}
-                            disabled={!isEditable}
-                          />
-                        </div>
-                        <div>
-                          <Label
-                            htmlFor="end"
-                            className="text-xs text-muted-foreground"
-                          >
-                            종료일
-                          </Label>
-                          <Input
-                            id="end"
-                            type="date"
-                            value={dateRangeEnd}
-                            onChange={(e) => setDateRangeEnd(e.target.value)}
-                            disabled={!isEditable}
-                          />
-                        </div>
-                      </div>
+                      <DateRangePicker
+                        value={dateRange}
+                        onChange={setDateRange}
+                        disabled={!isEditable}
+                        minDate={new Date(new Date().setHours(0, 0, 0, 0))}
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -757,37 +720,52 @@ export default function MeetingSettingsPage({
 
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="confirm-date">날짜</Label>
-                <Input
-                  id="confirm-date"
-                  type="date"
-                  value={confirmedDate}
-                  onChange={(e) => setConfirmedDate(e.target.value)}
-                  min={dateRangeStart}
-                  max={dateRangeEnd}
+                <Label>날짜</Label>
+                <DatePicker
+                  value={confirmedDateObj}
+                  onChange={(date) => {
+                    setConfirmedDateObj(date);
+                    setConfirmedDate(date ? format(date, 'yyyy-MM-dd') : '');
+                  }}
+                  minDate={dateRange?.from}
+                  maxDate={dateRange?.to}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-start">시작 시간</Label>
-                  <Input
-                    id="confirm-start"
-                    type="time"
-                    value={confirmedStartTime}
-                    onChange={(e) => setConfirmedStartTime(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirm-end">종료 시간</Label>
-                  <Input
-                    id="confirm-end"
-                    type="time"
-                    value={confirmedEndTime}
-                    onChange={(e) => setConfirmedEndTime(e.target.value)}
-                  />
-                </div>
+              {/* 종일 토글 */}
+              <div className="flex items-center justify-between rounded-lg bg-accent/40 px-4 py-3">
+                <Label htmlFor="confirm-allday" className="cursor-pointer font-medium">
+                  종일
+                </Label>
+                <Switch
+                  id="confirm-allday"
+                  checked={isAllDay}
+                  onCheckedChange={setIsAllDay}
+                />
               </div>
+
+              {!isAllDay && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-start">시작 시간</Label>
+                    <Input
+                      id="confirm-start"
+                      type="time"
+                      value={confirmedStartTime}
+                      onChange={(e) => setConfirmedStartTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-end">종료 시간</Label>
+                    <Input
+                      id="confirm-end"
+                      type="time"
+                      value={confirmedEndTime}
+                      onChange={(e) => setConfirmedEndTime(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter>

@@ -179,7 +179,8 @@ export default function FriendsPage() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 space-y-4">
+        <main className="flex-1 overflow-y-auto p-4">
+          <div className="content-area space-y-4">
 
           {/* 내 초대코드 + 친구 추가 */}
           <div className="notion-card p-4 space-y-4">
@@ -282,6 +283,7 @@ export default function FriendsPage() {
                 })}
               </div>
             )}
+          </div>
           </div>
         </main>
 

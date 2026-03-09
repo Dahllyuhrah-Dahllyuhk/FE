@@ -400,7 +400,7 @@ export default function AIPage() {
 
         <main className="flex-1 overflow-hidden">
           <div ref={scrollRef} className="h-full overflow-y-auto p-4">
-            <div className="space-y-6">
+            <div className="content-area space-y-6">
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -454,6 +454,7 @@ export default function AIPage() {
         </main>
 
         <div className="border-t border-border/40 bg-background/95 backdrop-blur-sm px-3 py-3 pb-safe">
+          <div className="content-area">
           <div className="flex gap-2 items-center">
             <button
               onClick={toggleListening}
@@ -482,6 +483,7 @@ export default function AIPage() {
             >
               <Send className="h-4 w-4" />
             </button>
+          </div>
           </div>
         </div>
 

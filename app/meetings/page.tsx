@@ -4,12 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProtectedRoute } from '@/components/protected-route';
 import { BottomNav } from '@/components/bottom-nav';
-import { Plus, Calendar, Search, Users, Loader2 } from 'lucide-react';
-import { fetchMeetings } from '@/lib/api';
+import { Plus, Calendar, Search, Users, Loader2, LogIn, X } from 'lucide-react';
+import { fetchMeetings, joinMeetingByCode } from '@/lib/api';
 import type { Meeting, MeetingStatus } from '@/types/meeting';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { useAuth } from '@/context/auth-context';
+import { toast } from '@/hooks/use-toast';
 
 export default function MeetingsPage() {
   const router = useRouter();
@@ -18,6 +19,11 @@ export default function MeetingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+
+  // 코드 참여 모달
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
 
   useEffect(() => {
     const loadMeetings = async () => {
@@ -32,6 +38,26 @@ export default function MeetingsPage() {
     };
     loadMeetings();
   }, []);
+
+  const handleJoin = async () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length < 6) {
+      toast({ title: '유효한 초대 코드를 입력해주세요.', variant: 'destructive' });
+      return;
+    }
+    setIsJoining(true);
+    try {
+      const meeting = await joinMeetingByCode(code);
+      toast({ title: '모임 참여 완료!', description: `"${meeting.name}"에 참여했습니다.` });
+      setShowJoinModal(false);
+      setJoinCode('');
+      router.push(`/meetings/${meeting.id}`);
+    } catch (e: any) {
+      toast({ title: e?.message ?? '참여에 실패했습니다.', variant: 'destructive' });
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   const filteredMeetings = meetings.filter((meeting) => {
     const matchesSearch = meeting.name
@@ -80,16 +106,27 @@ export default function MeetingsPage() {
         <header className="page-header">
           <div className="page-header-inner">
             <h1 className="page-title">모임</h1>
-            <button
-              onClick={() => router.push('/meetings/create')}
-              className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-accent transition-colors"
-            >
-              <Plus className="h-4 w-4 text-foreground/70" />
-            </button>
+            <div className="flex items-center gap-1">
+              {/* 코드로 참여 버튼 */}
+              <button
+                onClick={() => setShowJoinModal(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-primary hover:bg-primary/8 transition-colors border border-primary/30"
+              >
+                <LogIn className="h-3 w-3" />
+                코드 참여
+              </button>
+              <button
+                onClick={() => router.push('/meetings/create')}
+                className="flex items-center justify-center w-7 h-7 rounded-md hover:bg-accent transition-colors"
+              >
+                <Plus className="h-4 w-4 text-foreground/70" />
+              </button>
+            </div>
           </div>
         </header>
 
-        <main className="flex-1 p-4 space-y-3">
+        <main className="flex-1 p-4">
+          <div className="content-area space-y-3">
           {/* 검색 */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -134,6 +171,14 @@ export default function MeetingsPage() {
               <p className="text-sm text-muted-foreground">
                 {searchQuery ? '검색 결과가 없습니다' : '새로운 모임을 추가해보세요'}
               </p>
+              {!searchQuery && (
+                <button
+                  onClick={() => setShowJoinModal(true)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  초대 코드로 모임 참여하기
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -150,9 +195,7 @@ export default function MeetingsPage() {
                     onClick={() => router.push(`/meetings/${meeting.id}`)}
                   >
                     <div className="flex items-start gap-3">
-                      {/* 상태 인디케이터 */}
                       <div className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${getStatusColor(meeting.status)}`} />
-
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-1.5">
                           <span className="text-sm font-medium text-foreground truncate">
@@ -164,7 +207,6 @@ export default function MeetingsPage() {
                             </span>
                           )}
                         </div>
-
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
@@ -187,10 +229,61 @@ export default function MeetingsPage() {
               })}
             </div>
           )}
+          </div>
         </main>
 
         <BottomNav />
       </div>
+
+      {/* 코드 참여 모달 */}
+      {showJoinModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowJoinModal(false); setJoinCode(''); } }}
+        >
+          <div className="w-full sm:max-w-sm bg-background rounded-t-2xl sm:rounded-2xl border border-border/40 shadow-2xl overflow-hidden">
+            {/* 모바일 핸들 */}
+            <div className="flex justify-center pt-3 sm:hidden">
+              <div className="w-8 h-1 rounded-full bg-border/60" />
+            </div>
+
+            <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+              <h3 className="text-base font-semibold">초대 코드로 참여</h3>
+              <button
+                onClick={() => { setShowJoinModal(false); setJoinCode(''); }}
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-accent text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-5 pb-5 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                모임 호스트에게 받은 초대 코드를 입력해주세요.
+              </p>
+              <input
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+                placeholder="예: AB3DEFGH"
+                maxLength={8}
+                autoFocus
+                className="w-full text-center text-xl font-mono tracking-widest py-3 rounded-xl border border-border/60 bg-accent/20 outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/40 placeholder:text-base placeholder:tracking-normal"
+              />
+              <button
+                onClick={handleJoin}
+                disabled={isJoining || joinCode.trim().length < 6}
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-40 transition-opacity flex items-center justify-center gap-2"
+              >
+                <LogIn className="h-4 w-4" />
+                {isJoining ? '참여 중...' : '모임 참여'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ProtectedRoute>
   );
 }
+
+
