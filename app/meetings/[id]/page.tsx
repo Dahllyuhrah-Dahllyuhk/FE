@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import {
   ChevronLeft, Calendar, Clock, Users, Settings,
-  Trash2, Check, Lock, CheckCircle,
+  Trash2, Check, Lock, CheckCircle, Share2, Copy, CheckCheck,
 } from 'lucide-react';
 import { MeetingCalendar } from '@/components/meeting-calendar';
 import { ProtectedRoute } from '@/components/protected-route';
@@ -20,7 +20,7 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/auth-context';
 import {
   fetchMeeting, deleteMeeting, acceptMeetingInvitation,
-  inviteUserToMeeting, updateParticipantSettings,
+  inviteUserToMeeting, updateParticipantSettings, getMeetingInviteCode,
 } from '@/lib/api';
 import type { Meeting, MeetingStatus } from '@/types/meeting';
 import {
@@ -70,6 +70,8 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [reflectTimetable, setReflectTimetable] = useState(true);
   const [reflectCalendar, setReflectCalendar] = useState(true);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   useEffect(() => {
     fetchMeeting(id)
@@ -273,6 +275,63 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               <p className="text-sm text-muted-foreground">
                 모임이 {getStatusText(meeting.status)} 상태로 현재 응답할 수 없습니다.
               </p>
+            </div>
+          )}
+
+          {/* ── 초대 코드 (호스트만, PENDING 상태) ── */}
+          {isHost && meeting.status === 'PENDING' && (
+            <div className="notion-card p-4">
+              <p className="section-title flex items-center gap-1.5 mb-3">
+                <Share2 className="h-3 w-3" />
+                초대 코드
+              </p>
+              {inviteCode ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-xl border border-border/40">
+                    <code className="flex-1 text-center text-lg font-mono font-bold tracking-widest text-foreground">
+                      {inviteCode}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteCode);
+                        setCodeCopied(true);
+                        setTimeout(() => setCodeCopied(false), 2000);
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+                    >
+                      {codeCopied ? <CheckCheck className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const url = `${window.location.origin}/meetings/join?code=${inviteCode}`;
+                      navigator.clipboard.writeText(url);
+                      setCodeCopied(true);
+                      setTimeout(() => setCodeCopied(false), 2000);
+                    }}
+                    className="w-full text-xs text-primary hover:underline"
+                  >
+                    초대 링크 복사
+                  </button>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    친구에게 코드를 알려주거나 링크를 공유하세요
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={async () => {
+                    try {
+                      const code = await getMeetingInviteCode(meeting.id);
+                      setInviteCode(code);
+                    } catch {
+                      toast({ title: '코드 조회 실패', variant: 'destructive' });
+                    }
+                  }}
+                  className="w-full py-2 text-sm text-primary hover:underline"
+                >
+                  초대 코드 보기
+                </button>
+              )}
             </div>
           )}
 

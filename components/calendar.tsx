@@ -447,7 +447,6 @@ export function Calendar({
 
   const handlePointerDown = useCallback(
     (date: Date, e: React.PointerEvent) => {
-      if (bottomSheetOpenRef.current) return;
       const target = e.target as HTMLElement;
       if (target.closest('[data-event-clickable]')) return;
 
@@ -457,7 +456,10 @@ export function Calendar({
         return;
       }
 
-      // PC: 드래그 시작 - ref 사용
+      // PC: 패널 열려있으면 드래그 시작 막기
+      if (bottomSheetOpenRef.current) return;
+
+      // PC: 드래그 시작
       dragStateRef.current = {
         isDragging: true,
         dragStart: date,
@@ -532,10 +534,25 @@ export function Calendar({
           ...timedSingles,
         ];
 
+        // 같은 날짜를 다시 탭하면 패널 닫기
+        if (selectedDate && isSameDay(selectedDate, date)) {
+          setSelectedDate(null);
+          setBottomSheetEvents([]);
+          bottomSheetOpenRef.current = false;
+          return;
+        }
+
         if (allDayEventsForDate.length > 0) {
+          // 일정 있는 날 → 이벤트 패널 열기
           setSelectedDate(date);
           setBottomSheetEvents(allDayEventsForDate);
           bottomSheetOpenRef.current = true;
+        } else {
+          // 일정 없는 날 → 새 일정 생성 (기존 패널 닫고 생성 콜백 호출)
+          setSelectedDate(null);
+          setBottomSheetEvents([]);
+          bottomSheetOpenRef.current = false;
+          onCreateNewEvent?.(date);
         }
         return;
       }
@@ -597,7 +614,7 @@ export function Calendar({
       updateDragRange(null, null);
       touchStartPosRef.current = null;
     },
-    [events, isMobile, onDateRangeSelect, updateDragRange]
+    [events, isMobile, onDateRangeSelect, updateDragRange, selectedDate]
   );
 
   const fmtTime = (d: Date) =>
@@ -1010,100 +1027,69 @@ export function Calendar({
         ))}
       </div>
 
-      {/* 바텀시트 - 모바일 날짜 클릭 시 */}
+      {/* 이벤트 팝오버 카드 - 모바일: 화면 중앙 오버레이 */}
       {isMobile && selectedDate && bottomSheetEvents.length > 0 && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-end animate-in fade-in duration-200"
-          onPointerDown={(e) => {
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
+          onClick={(e) => {
             if (e.target === e.currentTarget) {
               setSelectedDate(null);
               setBottomSheetEvents([]);
-              bottomSheetOpenRef.current = false;
+              bottomSheetOpenRef.current = true;
+              setTimeout(() => { bottomSheetOpenRef.current = false; }, 400);
             }
           }}
         >
           <div
-            className="bg-background rounded-t-3xl w-full flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300"
-            style={{
-              maxHeight:
-                bottomSheetEvents.length === 1
-                  ? '55vh'
-                  : bottomSheetEvents.length <= 3
-                  ? '70vh'
-                  : '85vh',
-              minHeight:
-                bottomSheetEvents.length === 1
-                  ? '350px'
-                  : bottomSheetEvents.length <= 3
-                  ? '550px'
-                  : '75vh',
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
+            className="bg-background rounded-2xl w-full shadow-2xl border border-border/40 overflow-hidden"
+            style={{ maxWidth: '340px', maxHeight: '65vh' }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
-              <h3 className="text-lg font-bold">
-                {selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일
-              </h3>
-              <Button
-                variant="ghost"
-                size="icon"
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
+              <div>
+                <span className="text-[11px] text-muted-foreground">{selectedDate.toLocaleDateString('ko-KR', { weekday: 'long' })}</span>
+                <h3 className="text-sm font-bold">{selectedDate.getMonth() + 1}월 {selectedDate.getDate()}일</h3>
+              </div>
+              <button
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-accent text-muted-foreground"
                 onClick={() => {
                   setSelectedDate(null);
                   setBottomSheetEvents([]);
-                  bottomSheetOpenRef.current = false;
+                  bottomSheetOpenRef.current = true;
+                  setTimeout(() => { bottomSheetOpenRef.current = false; }, 400);
                 }}
               >
-                <X className="h-5 w-5" />
-              </Button>
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 overscroll-contain">
-              {bottomSheetEvents.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">
-                  일정이 없습니다
-                </p>
-              ) : (
-                bottomSheetEvents.map((evt) => (
+            <div className="overflow-y-auto p-3 space-y-2" style={{ maxHeight: 'calc(65vh - 56px)' }}>
+              {bottomSheetEvents.map((evt) => {
+                const s = getChipStyle(evt.color);
+                return (
                   <div
                     key={evt.id}
-                    className={`${evt.color} rounded-xl p-5 text-white cursor-pointer transition-transform active:scale-[0.98] shadow-lg`}
+                    className="flex items-start gap-2.5 p-3 rounded-xl cursor-pointer border active:opacity-70"
+                    style={{ backgroundColor: s.bg, borderColor: s.border }}
                     onClick={() => {
                       setSelectedDate(null);
                       setBottomSheetEvents([]);
-                      bottomSheetOpenRef.current = false;
+                      bottomSheetOpenRef.current = true;
+                      setTimeout(() => { bottomSheetOpenRef.current = false; }, 400);
                       onEventDoubleClick(evt);
                     }}
                   >
-                    <div className="font-semibold text-xl mb-2">
-                      {evt.title}
-                    </div>
-                    <div className="text-base opacity-90 font-medium">
-                      {evt.allDay ? (
-                        isMultiDayEvent(evt) ? (
-                          `${new Date(
-                            evt.startDate
-                          ).toLocaleDateString()} ~ ${new Date(
-                            evt.endDate
-                          ).toLocaleDateString()}`
-                        ) : (
-                          '종일'
-                        )
-                      ) : (
-                        <>
-                          {fmtTime(evt.startDate)} - {fmtTime(evt.endDate)}
-                        </>
-                      )}
-                    </div>
-                    {evt.description && (
-                      <div className="text-sm opacity-85 mt-2 leading-relaxed">
-                        {evt.description}
+                    <div className="w-1 rounded-full flex-shrink-0 self-stretch" style={{ backgroundColor: s.border, minHeight: '16px' }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold truncate" style={{ color: s.text }}>{evt.title}</div>
+                      <div className="text-xs mt-0.5 opacity-70" style={{ color: s.text }}>
+                        {evt.allDay ? (isMultiDayEvent(evt) ? `${new Date(evt.startDate).toLocaleDateString('ko-KR',{month:'short',day:'numeric'})} ~ ${new Date(evt.endDate).toLocaleDateString('ko-KR',{month:'short',day:'numeric'})}` : '종일') : `${fmtTime(evt.startDate)} - ${fmtTime(evt.endDate)}`}
                       </div>
-                    )}
+                      {evt.description && <div className="text-xs mt-1 opacity-60 line-clamp-1" style={{ color: s.text }}>{evt.description}</div>}
+                    </div>
                   </div>
-                ))
-              )}
+                );
+              })}
             </div>
           </div>
         </div>

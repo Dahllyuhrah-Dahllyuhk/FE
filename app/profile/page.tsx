@@ -86,6 +86,7 @@ export default function ProfilePage() {
         </header>
 
         <main className="flex-1 overflow-y-auto">
+          <div className="content-area">
 
           {/* 프로필 배너 */}
           <div className="relative">
@@ -233,6 +234,7 @@ export default function ProfilePage() {
               로그아웃
             </button>
 
+          </div>
           </div>
         </main>
 
