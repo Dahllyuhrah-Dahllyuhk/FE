@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import {
   ChevronLeft, Calendar, Clock, Users, Settings,
-  Trash2, Check, Lock, CheckCircle, Share2, Copy, CheckCheck,
+  Trash2, Check, Lock, CheckCircle, Share2, Copy, CheckCheck, UserPlus, CalendarIcon,
 } from 'lucide-react';
 import { MeetingCalendar } from '@/components/meeting-calendar';
 import { ProtectedRoute } from '@/components/protected-route';
@@ -20,9 +20,11 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/auth-context';
 import {
   fetchMeeting, deleteMeeting, acceptMeetingInvitation,
-  inviteUserToMeeting, updateParticipantSettings, getMeetingInviteCode,
+  updateParticipantSettings, getMeetingInviteCode,
+  updateMeetingState, fetchFriends, fetchMyInviteCode,
 } from '@/lib/api';
 import type { Meeting, MeetingStatus } from '@/types/meeting';
+import type { FriendDto } from '@/lib/api';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription,
@@ -32,6 +34,11 @@ import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
+import { TimePicker } from '@/components/ui/time-picker';
 
 /* ─── 헬퍼 ─── */
 function getStatusText(status: MeetingStatus) {
@@ -72,12 +79,35 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [isAccepting, setIsAccepting] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [friends, setFriends] = useState<FriendDto[]>([]);
+  const [myInviteCode, setMyInviteCode] = useState<string | null>(null);
+  const [showMyCodeDialog, setShowMyCodeDialog] = useState(false);
+
+  // 상태 변경 관련
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showPendingDialog, setShowPendingDialog] = useState(false);
+  const [confirmedDate, setConfirmedDate] = useState<Date | undefined>(undefined);
+  const [confirmedStartTime, setConfirmedStartTime] = useState('09:00');
+  const [confirmedEndTime, setConfirmedEndTime] = useState('10:00');
+  const [confirmedAllDay, setConfirmedAllDay] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   useEffect(() => {
-    fetchMeeting(id)
-      .then(setMeeting)
-      .catch(() => toast({ title: '로드 실패', variant: 'destructive' }))
-      .finally(() => setIsLoading(false));
+    const load = async () => {
+      try {
+        const m = await fetchMeeting(id);
+        setMeeting(m);
+        if (user?.id === m.hostUserId && m.status === 'PENDING') {
+          getMeetingInviteCode(m.id).then(setInviteCode).catch(() => {});
+        }
+      } catch {
+        toast({ title: '로드 실패', variant: 'destructive' });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+    fetchFriends().then(setFriends).catch(() => {});
   }, [id]);
 
   const handleDelete = async () => {
@@ -89,6 +119,50 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     } catch {
       toast({ title: '삭제 실패', variant: 'destructive' });
     }
+  };
+
+  const updateStatus = async (newStatus: MeetingStatus, confirmedStart?: string, confirmedEnd?: string) => {
+    if (!meeting) return;
+    setIsUpdatingStatus(true);
+    try {
+      const updated = await updateMeetingState(meeting.id, { status: newStatus, confirmedStart, confirmedEnd });
+      setMeeting(updated);
+      // PENDING으로 돌아가면 초대코드 재로드
+      if (newStatus === 'PENDING' && user?.id === updated.hostUserId) {
+        getMeetingInviteCode(updated.id).then(setInviteCode).catch(() => {});
+      }
+      const label = newStatus === 'PENDING' ? '조율 중' : newStatus === 'CONFIRMED' ? '확정됨' : '종료됨';
+      toast({ title: `"${label}"으로 변경되었습니다.` });
+    } catch {
+      toast({ title: '상태 변경 실패', variant: 'destructive' });
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const handleConfirmMeeting = async () => {
+    if (!confirmedDate) {
+      toast({ title: '날짜를 선택해주세요.', variant: 'destructive' });
+      return;
+    }
+    const dateStr = format(confirmedDate, 'yyyy-MM-dd');
+    let startIso: string;
+    let endIso: string | undefined;
+    if (confirmedAllDay) {
+      startIso = new Date(`${dateStr}T00:00:00`).toISOString();
+      endIso = undefined;
+    } else {
+      const start = new Date(`${dateStr}T${confirmedStartTime}:00`);
+      const end = new Date(`${dateStr}T${confirmedEndTime}:00`);
+      if (end <= start) {
+        toast({ title: '종료 시간은 시작 시간 이후여야 합니다.', variant: 'destructive' });
+        return;
+      }
+      startIso = start.toISOString();
+      endIso = end.toISOString();
+    }
+    setShowConfirmDialog(false);
+    await updateStatus('CONFIRMED', startIso, endIso);
   };
 
   const handleConfirmAccept = async () => {
@@ -107,6 +181,19 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const handleShowMyCode = async () => {
+    if (!myInviteCode) {
+      try {
+        const data = await fetchMyInviteCode();
+        setMyInviteCode(data.code);
+      } catch {
+        toast({ title: '초대코드 조회 실패', variant: 'destructive' });
+        return;
+      }
+    }
+    setShowMyCodeDialog(true);
+  };
+
   /* ─── 로딩 / 에러 ─── */
   if (isLoading) {
     return (
@@ -115,6 +202,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
       </div>
     );
   }
+
   if (!meeting) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
@@ -125,15 +213,16 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   }
 
   /* ─── 상태 계산 ─── */
-  const isHost       = user?.id === meeting.hostUserId;
-  const participant  = meeting.participants?.find(p => p.userId === user?.id);
-  const isPending    = participant?.status === 'PENDING';
-  const isAccepted   = !isPending && (participant?.status === 'ACCEPTED' || isHost);
-  const isEditable   = meeting.status === 'PENDING';
-  const isConfirmed  = meeting.status === 'CONFIRMED';
-  const isClosed     = meeting.status === 'CLOSED';
-  const accepted     = meeting.participants?.filter(p => p.status === 'ACCEPTED') ?? [];
-  const pendingList  = meeting.participants?.filter(p => p.status === 'PENDING') ?? [];
+  const isHost      = user?.id === meeting.hostUserId;
+  const participant = meeting.participants?.find(p => p.userId === user?.id);
+  const isPending   = participant?.status === 'PENDING';
+  const isAccepted  = !isPending && (participant?.status === 'ACCEPTED' || isHost);
+  const isEditable  = meeting.status === 'PENDING';
+  const isConfirmed = meeting.status === 'CONFIRMED';
+  const isClosed    = meeting.status === 'CLOSED';
+  const accepted    = meeting.participants?.filter(p => p.status === 'ACCEPTED') ?? [];
+  const pendingList = meeting.participants?.filter(p => p.status === 'PENDING') ?? [];
+  const friendIds   = new Set(friends.map(f => f.id));
 
   return (
     <ProtectedRoute>
@@ -174,10 +263,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>취소</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDelete}
-                        className="bg-destructive text-destructive-foreground"
-                      >
+                      <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
                         삭제
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -188,233 +274,299 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 pb-24 space-y-4">
+        <main className="flex-1 overflow-y-auto pb-24">
+          <div className="content-area p-4 space-y-4">
 
-          {/* ── 모임 요약 카드 ── */}
-          <div className="notion-card p-4 space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <h2 className="text-base font-semibold text-foreground leading-tight">{meeting.name}</h2>
-              <StatusPill status={meeting.status} />
-            </div>
-
-            <div className="space-y-1.5 text-xs text-muted-foreground">
-              {meeting.confirmedStart ? (
-                <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
-                  <CheckCircle className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>
-                    {format(new Date(meeting.confirmedStart), 'yyyy년 M월 d일 (E) HH:mm', { locale: ko })}
-                    {meeting.confirmedEnd && ` ~ ${format(new Date(meeting.confirmedEnd), 'HH:mm', { locale: ko })}`}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>
-                    {format(new Date(meeting.requirement.dateRangeStart), 'M월 d일 (E)', { locale: ko })}
-                    {' ~ '}
-                    {format(new Date(meeting.requirement.dateRangeEnd), 'M월 d일 (E)', { locale: ko })}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Users className="h-3.5 w-3.5 flex-shrink-0" />
-                <span>{meeting.participants?.length ?? 0}명 참여 중</span>
+            {/* ── 모임 요약 카드 ── */}
+            <div className="notion-card p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <h2 className="text-base font-semibold text-foreground leading-tight">{meeting.name}</h2>
+                <StatusPill status={meeting.status} />
               </div>
-              {meeting.requirement.isAllDay && (
+              <div className="space-y-1.5 text-xs text-muted-foreground">
+                {meeting.confirmedStart ? (
+                  <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-medium">
+                    <CheckCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>
+                      {format(new Date(meeting.confirmedStart), 'yyyy년 M월 d일 (E) HH:mm', { locale: ko })}
+                      {meeting.confirmedEnd && ` ~ ${format(new Date(meeting.confirmedEnd), 'HH:mm', { locale: ko })}`}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>
+                      {format(new Date(meeting.requirement.dateRangeStart), 'M월 d일 (E)', { locale: ko })}
+                      {' ~ '}
+                      {format(new Date(meeting.requirement.dateRangeEnd), 'M월 d일 (E)', { locale: ko })}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>하루 종일</span>
+                  <Users className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>{meeting.participants?.length ?? 0}명 참여 중</span>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── 확정/종료 배너 ── */}
-          {(isConfirmed || isClosed) && (
-            <div className={`rounded-xl px-4 py-3 flex items-start gap-3 ${
-              isConfirmed
-                ? 'bg-green-50 dark:bg-green-900/15 border border-green-200/60 dark:border-green-800/40'
-                : 'bg-muted/40 border border-border/40'
-            }`}>
-              {isConfirmed
-                ? <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                : <Lock className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-              }
-              <div>
-                <p className={`text-sm font-medium ${isConfirmed ? 'text-green-800 dark:text-green-300' : 'text-muted-foreground'}`}>
-                  {isConfirmed ? '모임이 확정되었습니다' : '종료된 모임입니다'}
-                </p>
-                {meeting.confirmedStart && isConfirmed && (
-                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                    {format(new Date(meeting.confirmedStart), 'M월 d일 (E) HH:mm', { locale: ko })}
-                  </p>
+                {meeting.requirement.isAllDay && (
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>하루 종일</span>
+                  </div>
                 )}
               </div>
             </div>
-          )}
 
-          {/* ── 초대 수락 배너 ── */}
-          {isPending && isEditable && (
-            <div className="rounded-xl px-4 py-3 flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-900/15 border border-amber-200/60 dark:border-amber-800/40">
-              <div>
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">초대된 모임입니다</p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">수락하고 일정을 조율해주세요</p>
+            {/* ── 호스트 전용: 상태 변경 액션 바 ── */}
+            {isHost && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {meeting.status === 'PENDING' && (
+                  <button
+                    onClick={() => setShowConfirmDialog(true)}
+                    disabled={isUpdatingStatus}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-green-500 text-white text-xs font-semibold hover:bg-green-600 transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    모임 확정
+                  </button>
+                )}
+                {meeting.status === 'PENDING' && (
+                  <button
+                    onClick={() => updateStatus('CLOSED')}
+                    disabled={isUpdatingStatus}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-muted text-muted-foreground text-xs font-medium hover:bg-muted/80 transition-colors border border-border/60 disabled:opacity-50"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    종료
+                  </button>
+                )}
+                {(meeting.status === 'CONFIRMED' || meeting.status === 'CLOSED') && (
+                  <button
+                    onClick={() => setShowPendingDialog(true)}
+                    disabled={isUpdatingStatus}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-xs font-medium hover:bg-amber-100 transition-colors border border-amber-200/60 disabled:opacity-50"
+                  >
+                    조율 중으로 되돌리기
+                  </button>
+                )}
+                {meeting.status === 'CONFIRMED' && (
+                  <button
+                    onClick={() => updateStatus('CLOSED')}
+                    disabled={isUpdatingStatus}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-muted text-muted-foreground text-xs font-medium hover:bg-muted/80 transition-colors border border-border/60 disabled:opacity-50"
+                  >
+                    <Lock className="h-3.5 w-3.5" />
+                    종료
+                  </button>
+                )}
               </div>
-              <button
-                onClick={() => setShowAcceptDialog(true)}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors flex-shrink-0"
-              >
-                <Check className="h-3.5 w-3.5" />
-                수락
-              </button>
-            </div>
-          )}
+            )}
 
-          {isPending && !isEditable && (
-            <div className="rounded-xl px-4 py-3 bg-muted/40 border border-border/40">
-              <p className="text-sm text-muted-foreground">
-                모임이 {getStatusText(meeting.status)} 상태로 현재 응답할 수 없습니다.
-              </p>
-            </div>
-          )}
+            {/* ── 확정/종료 배너 ── */}
+            {(isConfirmed || isClosed) && (
+              <div className={`rounded-xl px-4 py-3 flex items-start gap-3 ${
+                isConfirmed
+                  ? 'bg-green-50 dark:bg-green-900/15 border border-green-200/60 dark:border-green-800/40'
+                  : 'bg-muted/40 border border-border/40'
+              }`}>
+                {isConfirmed
+                  ? <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  : <Lock className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                }
+                <div>
+                  <p className={`text-sm font-medium ${isConfirmed ? 'text-green-800 dark:text-green-300' : 'text-muted-foreground'}`}>
+                    {isConfirmed ? '모임이 확정되었습니다' : '종료된 모임입니다'}
+                  </p>
+                  {meeting.confirmedStart && isConfirmed && (
+                    <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                      {format(new Date(meeting.confirmedStart), 'M월 d일 (E) HH:mm', { locale: ko })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
-          {/* ── 초대 코드 (호스트만, PENDING 상태) ── */}
-          {isHost && meeting.status === 'PENDING' && (
-            <div className="notion-card p-4">
-              <p className="section-title flex items-center gap-1.5 mb-3">
-                <Share2 className="h-3 w-3" />
-                초대 코드
-              </p>
-              {inviteCode ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-xl border border-border/40">
-                    <code className="flex-1 text-center text-lg font-mono font-bold tracking-widest text-foreground">
-                      {inviteCode}
-                    </code>
+            {/* ── 초대 수락 배너 ── */}
+            {isPending && isEditable && (
+              <div className="rounded-xl px-4 py-3 flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-900/15 border border-amber-200/60 dark:border-amber-800/40">
+                <div>
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">초대된 모임입니다</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">수락하고 일정을 조율해주세요</p>
+                </div>
+                <button
+                  onClick={() => setShowAcceptDialog(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors flex-shrink-0"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  수락
+                </button>
+              </div>
+            )}
+
+            {isPending && !isEditable && (
+              <div className="rounded-xl px-4 py-3 bg-muted/40 border border-border/40">
+                <p className="text-sm text-muted-foreground">
+                  모임이 {getStatusText(meeting.status)} 상태로 현재 응답할 수 없습니다.
+                </p>
+              </div>
+            )}
+
+            {/* ── 초대 코드 (호스트, PENDING, 항상 표시) ── */}
+            {isHost && meeting.status === 'PENDING' && (
+              <div className="notion-card p-4">
+                <p className="section-title flex items-center gap-1.5 mb-3">
+                  <Share2 className="h-3 w-3" />
+                  초대 코드
+                </p>
+                {inviteCode ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-xl border border-border/40">
+                      <code className="flex-1 text-center text-lg font-mono font-bold tracking-widest text-foreground">
+                        {inviteCode}
+                      </code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(inviteCode);
+                          setCodeCopied(true);
+                          setTimeout(() => setCodeCopied(false), 2000);
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+                      >
+                        {codeCopied ? <CheckCheck className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                      </button>
+                    </div>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(inviteCode);
+                        const url = `${window.location.origin}/meetings/join?code=${inviteCode}`;
+                        navigator.clipboard.writeText(url);
                         setCodeCopied(true);
                         setTimeout(() => setCodeCopied(false), 2000);
                       }}
-                      className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+                      className="w-full text-xs text-primary hover:underline"
                     >
-                      {codeCopied ? <CheckCheck className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                      초대 링크 복사
                     </button>
+                    <p className="text-[11px] text-muted-foreground text-center">
+                      친구에게 코드를 알려주거나 링크를 공유하세요
+                    </p>
                   </div>
-                  <button
-                    onClick={() => {
-                      const url = `${window.location.origin}/meetings/join?code=${inviteCode}`;
-                      navigator.clipboard.writeText(url);
-                      setCodeCopied(true);
-                      setTimeout(() => setCodeCopied(false), 2000);
-                    }}
-                    className="w-full text-xs text-primary hover:underline"
-                  >
-                    초대 링크 복사
-                  </button>
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    친구에게 코드를 알려주거나 링크를 공유하세요
-                  </p>
-                </div>
-              ) : (
-                <button
-                  onClick={async () => {
-                    try {
-                      const code = await getMeetingInviteCode(meeting.id);
-                      setInviteCode(code);
-                    } catch {
-                      toast({ title: '코드 조회 실패', variant: 'destructive' });
-                    }
-                  }}
-                  className="w-full py-2 text-sm text-primary hover:underline"
-                >
-                  초대 코드 보기
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* ── 참여자 ── */}
-          <div className="notion-card p-4">
-            <p className="section-title flex items-center gap-1.5">
-              <Users className="h-3 w-3" />
-              참여자
-            </p>
-
-            {accepted.length > 0 && (
-              <div className="mb-3">
-                <p className="text-[11px] text-muted-foreground mb-2">참여 확정 {accepted.length}명</p>
-                <div className="flex flex-wrap gap-2">
-                  {accepted.map(p => (
-                    <div key={p.userId} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-green-50 dark:bg-green-900/20 border border-green-200/60 dark:border-green-800/40">
-                      <Avatar className="h-5 w-5">
-                        <AvatarFallback className="text-[10px] bg-green-500 text-white">
-                          {p.name?.[0] ?? '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-xs font-medium text-green-800 dark:text-green-300">
-                        {p.name}
-                        {p.userId === meeting.hostUserId && <span className="opacity-60 ml-1">호스트</span>}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {pendingList.length > 0 && (
-              <div>
-                <p className="text-[11px] text-muted-foreground mb-2">응답 대기 {pendingList.length}명</p>
-                <div className="flex flex-wrap gap-2">
-                  {pendingList.map(p => (
-                    <div key={p.userId} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-accent border border-border/40">
-                      <Avatar className="h-5 w-5">
-                        <AvatarFallback className="text-[10px] bg-muted-foreground/30 text-muted-foreground">
-                          {p.name?.[0] ?? '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-xs text-muted-foreground">{p.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!meeting.participants?.length && (
-              <p className="text-sm text-muted-foreground text-center py-3">참여자가 없습니다</p>
-            )}
-          </div>
-
-          {/* ── 일정 조율 ── */}
-          {isAccepted ? (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="section-title mb-0">일정 조율</p>
-                {!isEditable && (
-                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <Lock className="h-3 w-3" />
-                    읽기 전용
-                  </span>
+                ) : (
+                  <div className="flex items-center justify-center py-3">
+                    <div className="h-4 w-4 rounded-full border-2 border-primary border-r-transparent animate-spin" />
+                  </div>
                 )}
               </div>
-              {isEditable && (
-                <p className="text-xs text-muted-foreground mb-3">가능한 날짜와 시간을 선택해주세요.</p>
+            )}
+
+            {/* ── 참여자 ── */}
+            <div className="notion-card p-4">
+              <p className="section-title flex items-center gap-1.5 mb-3">
+                <Users className="h-3 w-3" />
+                참여자
+              </p>
+
+              {accepted.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[11px] text-muted-foreground mb-2">참여 확정 {accepted.length}명</p>
+                  <div className="space-y-2">
+                    {accepted.map(p => {
+                      const isSelf = p.userId === user?.id;
+                      const isFriend = friendIds.has(p.userId);
+                      return (
+                        <div key={p.userId} className="flex items-center gap-2">
+                          <div className="flex flex-1 items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-green-50 dark:bg-green-900/20 border border-green-200/60 dark:border-green-800/40 min-w-0">
+                            <Avatar className="h-5 w-5 flex-shrink-0">
+                              <AvatarFallback className="text-[10px] bg-green-500 text-white">
+                                {p.name?.[0] ?? '?'}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs font-medium text-green-800 dark:text-green-300 truncate">
+                              {p.name}
+                              {p.userId === meeting.hostUserId && <span className="opacity-60 ml-1">호스트</span>}
+                              {isSelf && <span className="opacity-60 ml-1">나</span>}
+                            </span>
+                          </div>
+                          {!isSelf && !isFriend && (
+                            <button
+                              onClick={handleShowMyCode}
+                              className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                            >
+                              <UserPlus className="h-3 w-3" />
+                              친구추가
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
-              <div className="min-h-[500px]">
+
+              {pendingList.length > 0 && (
+                <div>
+                  <p className="text-[11px] text-muted-foreground mb-2">응답 대기 {pendingList.length}명</p>
+                  <div className="space-y-2">
+                    {pendingList.map(p => {
+                      const isSelf = p.userId === user?.id;
+                      const isFriend = friendIds.has(p.userId);
+                      return (
+                        <div key={p.userId} className="flex items-center gap-2">
+                          <div className="flex flex-1 items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-accent border border-border/40 min-w-0">
+                            <Avatar className="h-5 w-5 flex-shrink-0">
+                              <AvatarFallback className="text-[10px] bg-muted-foreground/30 text-muted-foreground">
+                                {p.name?.[0] ?? '?'}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-xs text-muted-foreground truncate">{p.name}</span>
+                          </div>
+                          {!isSelf && !isFriend && (
+                            <button
+                              onClick={handleShowMyCode}
+                              className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                            >
+                              <UserPlus className="h-3 w-3" />
+                              친구추가
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {!meeting.participants?.length && (
+                <p className="text-sm text-muted-foreground text-center py-3">참여자가 없습니다</p>
+              )}
+            </div>
+
+            {/* ── 일정 조율 ── */}
+            {isAccepted ? (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="section-title mb-0">일정 조율</p>
+                  {!isEditable && (
+                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <Lock className="h-3 w-3" />
+                      읽기 전용
+                    </span>
+                  )}
+                </div>
+                {isEditable && (
+                  <p className="text-xs text-muted-foreground mb-3">가능한 날짜와 시간을 선택해주세요.</p>
+                )}
                 <MeetingCalendar
                   meeting={meeting}
                   currentUserId={user?.id}
                   readonly={!isEditable}
                 />
               </div>
-            </div>
-          ) : (
-            <div className="notion-card flex flex-col items-center justify-center h-48 text-muted-foreground">
-              <Calendar className="h-8 w-8 mb-3 opacity-20" />
-              <p className="text-sm">초대를 수락하면 일정을 조율할 수 있습니다.</p>
-            </div>
-          )}
+            ) : (
+              <div className="notion-card flex flex-col items-center justify-center h-48 text-muted-foreground">
+                <Calendar className="h-8 w-8 mb-3 opacity-20" />
+                <p className="text-sm">초대를 수락하면 일정을 조율할 수 있습니다.</p>
+              </div>
+            )}
+
+          </div>
         </main>
 
         {/* ── 초대 수락 다이얼로그 ── */}
@@ -443,9 +595,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
             <DialogFooter className="gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowAcceptDialog(false)} disabled={isAccepting}>
-                취소
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowAcceptDialog(false)} disabled={isAccepting}>취소</Button>
               <Button size="sm" onClick={handleConfirmAccept} disabled={isAccepting}>
                 {isAccepting ? '처리 중...' : '수락'}
               </Button>
@@ -455,6 +605,120 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
         <BottomNav />
       </div>
+
+      {/* ── 모임 확정 다이얼로그 ── */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">모임 확정하기</DialogTitle>
+            <DialogDescription className="text-xs">최종 모임 날짜와 시간을 선택해주세요.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">날짜</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className={cn(
+                    'w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-input bg-background text-sm text-left hover:bg-accent transition-colors',
+                    !confirmedDate && 'text-muted-foreground'
+                  )}>
+                    <CalendarIcon className="h-4 w-4 flex-shrink-0" />
+                    {confirmedDate
+                      ? format(confirmedDate, 'yyyy년 M월 d일 (E)', { locale: ko })
+                      : '날짜 선택'}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarPicker
+                    mode="single"
+                    selected={confirmedDate}
+                    onSelect={setConfirmedDate}
+                    locale={ko}
+                    fromDate={meeting.requirement?.dateRangeStart ? new Date(meeting.requirement.dateRangeStart) : undefined}
+                    toDate={meeting.requirement?.dateRangeEnd ? new Date(meeting.requirement.dateRangeEnd) : undefined}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-accent/40 px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-sm">종일</span>
+              </div>
+              <Switch checked={confirmedAllDay} onCheckedChange={setConfirmedAllDay} />
+            </div>
+            {!confirmedAllDay && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">시작 시간</label>
+                  <TimePicker value={confirmedStartTime} onChange={setConfirmedStartTime} className="w-full" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">종료 시간</label>
+                  <TimePicker value={confirmedEndTime} onChange={setConfirmedEndTime} className="w-full" />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowConfirmDialog(false)} disabled={isUpdatingStatus}>취소</Button>
+            <Button size="sm" onClick={handleConfirmMeeting} disabled={isUpdatingStatus || !confirmedDate} className="bg-green-500 hover:bg-green-600">
+              {isUpdatingStatus ? '처리 중...' : '확정'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── 조율 중으로 되돌리기 확인 ── */}
+      <AlertDialog open={showPendingDialog} onOpenChange={setShowPendingDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>조율 중으로 변경할까요?</AlertDialogTitle>
+            <AlertDialogDescription>참여자들이 다시 일정을 조율할 수 있게 됩니다.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUpdatingStatus}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { setShowPendingDialog(false); updateStatus('PENDING'); }}
+              disabled={isUpdatingStatus}
+            >
+              변경
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── 내 초대코드 공유 다이얼로그 ── */}
+      <Dialog open={showMyCodeDialog} onOpenChange={setShowMyCodeDialog}>
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">내 초대코드 공유</DialogTitle>
+            <DialogDescription className="text-xs">
+              상대방이 친구 탭에서 이 코드를 입력하면 친구가 됩니다.
+            </DialogDescription>
+          </DialogHeader>
+          {myInviteCode && (
+            <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-xl border border-border/40 my-2">
+              <code className="flex-1 text-center text-lg font-mono font-bold tracking-widest text-foreground">
+                {myInviteCode}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(myInviteCode);
+                  toast({ title: '복사됨' });
+                }}
+                className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          <DialogFooter>
+            <Button size="sm" onClick={() => setShowMyCodeDialog(false)}>닫기</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   );
 }

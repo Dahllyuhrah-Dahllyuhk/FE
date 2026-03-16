@@ -19,6 +19,7 @@ import { ko } from 'date-fns/locale';
 import type { DateRange } from 'react-day-picker';
 import type { Event } from '@/types/calendar';
 import { DateRangePicker } from '@/components/ui/date-picker';
+import { TimePicker } from '@/components/ui/time-picker';
 
 type EventDialogProps = {
   open: boolean;
@@ -184,22 +185,17 @@ export function EventDialog({
               </div>
             </div>
             {!allDay && (
-              <div className="flex items-center gap-3 px-4 py-3">
-                <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <div className="flex items-center gap-2 flex-1 text-sm">
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="bg-transparent border-0 outline-none focus:ring-0 w-24"
-                  />
-                  <span className="text-muted-foreground">~</span>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="bg-transparent border-0 outline-none focus:ring-0 w-24"
-                  />
+              <div className="flex items-start gap-3 px-4 py-3">
+                <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-2.5" />
+                <div className="flex flex-col gap-2 flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground w-8 flex-shrink-0">시작</span>
+                    <TimePicker value={startTime} onChange={setStartTime} className="flex-1 min-w-0" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground w-8 flex-shrink-0">종료</span>
+                    <TimePicker value={endTime} onChange={setEndTime} className="flex-1 min-w-0" />
+                  </div>
                 </div>
               </div>
             )}
