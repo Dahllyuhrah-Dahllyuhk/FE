@@ -42,7 +42,7 @@ export default function HomePage() {
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
-  const monthChangeTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const monthChangeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const mapRaw = (list: RawCalendarEvent[]): Event[] =>
     list
