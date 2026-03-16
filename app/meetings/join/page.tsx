@@ -15,18 +15,20 @@ function JoinPageContent() {
   const [code, setCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 
-  // URL에 code 파라미터가 있으면 자동 입력
+  // URL에 code 파라미터가 있으면 자동 입력 + 자동 참여 시도
   useEffect(() => {
     const urlCode = searchParams.get('code');
-    if (urlCode) setCode(urlCode.toUpperCase());
-  }, [searchParams]);
-
-  const handleJoin = async () => {
-    const trimmed = code.trim().toUpperCase();
-    if (!trimmed || trimmed.length < 6) {
-      toast({ title: '유효한 초대 코드를 입력해주세요.', variant: 'destructive' });
-      return;
+    if (urlCode) {
+      const upper = urlCode.toUpperCase();
+      setCode(upper);
+      // 코드가 URL에 있으면 자동으로 참여 시도
+      handleJoinWithCode(upper);
     }
+  }, []); // eslint-disable-line
+
+  const handleJoinWithCode = async (targetCode: string) => {
+    const trimmed = targetCode.trim().toUpperCase();
+    if (!trimmed || trimmed.length < 6) return;
 
     setIsJoining(true);
     try {
@@ -36,10 +38,11 @@ function JoinPageContent() {
     } catch (e: any) {
       const msg = e?.message ?? '참여에 실패했습니다.';
       toast({ title: msg, variant: 'destructive' });
-    } finally {
       setIsJoining(false);
     }
   };
+
+  const handleJoin = () => handleJoinWithCode(code);
 
   return (
     <ProtectedRoute>

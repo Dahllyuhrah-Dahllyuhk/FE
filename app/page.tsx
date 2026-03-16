@@ -42,6 +42,7 @@ export default function HomePage() {
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
+  const monthChangeTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const mapRaw = (list: RawCalendarEvent[]): Event[] =>
     list
@@ -101,29 +102,49 @@ export default function HomePage() {
     const connect = () => {
       es = new EventSource(sseUrl, { withCredentials: true });
 
+      // 개별 이벤트 변경 — 전체 재로드 없이 state만 패치
+      es.addEventListener('events-changed', (e: MessageEvent) => {
+        try {
+          const { changed, deletedIds } = JSON.parse(e.data) as {
+            changed: RawCalendarEvent[];
+            deletedIds: string[];
+          };
+          setEvents((prev) => {
+            let next = [...prev];
+            if (deletedIds?.length) {
+              next = next.filter((ev) => !deletedIds.includes(ev.id));
+            }
+            if (changed?.length) {
+              for (const raw of changed) {
+                const mapped = mapRawToCalendarEvent(raw, 0);
+                const idx = next.findIndex((ev) => ev.id === mapped.id);
+                if (idx >= 0) next[idx] = mapped;
+                else next.push(mapped);
+              }
+              next.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+            }
+            return next;
+          });
+        } catch {
+          refresh(); // 파싱 실패 시 전체 새로고침 fallback
+        }
+      });
+
+      // 전체 새로고침 fallback (수동 동기화 버튼 등)
       es.addEventListener('events-updated', () => {
         refresh();
       });
 
       es.onerror = () => {
         es.close();
-        // 5초 후 재연결 시도
         retryTimeout = setTimeout(connect, 5000);
       };
     };
 
     connect();
 
-    // 30초 폴링: 로컬 환경이나 웹훅 미수신 시 보조 동기화
-    const pollInterval = setInterval(() => {
-      fetch(`${API_BASE}/api/calendar/sync`, { method: 'POST', credentials: 'include' })
-        .then((r) => { if (r.ok) refresh(); })
-        .catch(() => {});
-    }, 30000);
-
     return () => {
       clearTimeout(retryTimeout);
-      clearInterval(pollInterval);
       es?.close();
     };
   }, [refresh]);
@@ -132,57 +153,61 @@ export default function HomePage() {
     async (months: Date[]) => {
       if (!initialLoadDoneRef.current) return;
 
-      const newMonths = months.filter((m) => {
-        const key = `${m.getFullYear()}-${m.getMonth()}`;
-        return !loadedMonthsRef.current.has(key);
-      });
-
-      if (newMonths.length === 0) return;
-
-      const sortedMonths = [...newMonths].sort(
-        (a, b) => a.getTime() - b.getTime()
-      );
-      const startMonth = sortedMonths[0];
-      const endMonth = sortedMonths[sortedMonths.length - 1];
-
-      const startDate = new Date(
-        startMonth.getFullYear(),
-        startMonth.getMonth(),
-        1
-      );
-      const endDate = new Date(
-        endMonth.getFullYear(),
-        endMonth.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999
-      );
-
-      try {
-        const raw = await fetchEvents({
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
+      // 빠른 스크롤 시 버벅임 방지 — 300ms 디바운스
+      clearTimeout(monthChangeTimerRef.current);
+      monthChangeTimerRef.current = setTimeout(async () => {
+        const newMonths = months.filter((m) => {
+          const key = `${m.getFullYear()}-${m.getMonth()}`;
+          return !loadedMonthsRef.current.has(key);
         });
 
-        newMonths.forEach((m) => {
-          loadedMonthsRef.current.add(`${m.getFullYear()}-${m.getMonth()}`);
-        });
+        if (newMonths.length === 0) return;
 
-        if (raw.length > 0) {
-          setEvents((prev) => {
-            const existingIds = new Set(prev.map((e) => e.id));
-            const newEvents = mapRaw(raw).filter((e) => !existingIds.has(e.id));
-            if (newEvents.length === 0) return prev;
-            return [...prev, ...newEvents].sort(
-              (a, b) => a.startDate.getTime() - b.startDate.getTime()
-            );
+        const sortedMonths = [...newMonths].sort(
+          (a, b) => a.getTime() - b.getTime()
+        );
+        const startMonth = sortedMonths[0];
+        const endMonth = sortedMonths[sortedMonths.length - 1];
+
+        const startDate = new Date(
+          startMonth.getFullYear(),
+          startMonth.getMonth(),
+          1
+        );
+        const endDate = new Date(
+          endMonth.getFullYear(),
+          endMonth.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        );
+
+        try {
+          const raw = await fetchEvents({
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
           });
+
+          newMonths.forEach((m) => {
+            loadedMonthsRef.current.add(`${m.getFullYear()}-${m.getMonth()}`);
+          });
+
+          if (raw.length > 0) {
+            setEvents((prev) => {
+              const existingIds = new Set(prev.map((e) => e.id));
+              const newEvents = mapRaw(raw).filter((e) => !existingIds.has(e.id));
+              if (newEvents.length === 0) return prev;
+              return [...prev, ...newEvents].sort(
+                (a, b) => a.startDate.getTime() - b.startDate.getTime()
+              );
+            });
+          }
+        } catch (err) {
+          console.warn('[v0] 추가 이벤트 로드 실패:', err);
         }
-      } catch (err) {
-        console.warn('[v0] 추가 이벤트 로드 실패:', err);
-      }
+      }, 300);
     },
     [colorMap]
   );
