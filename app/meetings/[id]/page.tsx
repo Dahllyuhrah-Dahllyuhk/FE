@@ -195,19 +195,6 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  const handleShowMyCode = async () => {
-    if (!myInviteCode) {
-      try {
-        const data = await fetchMyInviteCode();
-        setMyInviteCode(data.code);
-      } catch {
-        toast({ title: '초대코드 조회 실패', variant: 'destructive' });
-        return;
-      }
-    }
-    setShowMyCodeDialog(true);
-  };
-
   /* ─── 로딩 / 에러 ─── */
   if (isLoading) {
     return (
