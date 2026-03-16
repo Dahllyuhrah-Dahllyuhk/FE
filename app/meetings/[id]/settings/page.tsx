@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
-import { ChevronLeft, Lock } from 'lucide-react';
+import { useRouter } from 'next/navigation';import { ChevronLeft, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import type { DateRange } from 'react-day-picker';
@@ -613,63 +612,50 @@ export default function MeetingSettingsPage({
                     <div className="space-y-2">
                       <Label>참여자 관리</Label>
                       <div className="rounded-lg border border-border p-4 max-h-64 overflow-y-auto">
-                        {friends.length === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-4">
-                            친구가 없습니다
-                          </p>
+                        {meeting.participants?.length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-4">참여자가 없습니다</p>
                         ) : (
                           <div className="space-y-2">
-                            {friends.map((friend) => {
-                              if (friend.id === meeting.hostUserId) return null;
-
-                              const isCurrentlyInvited =
-                                selectedFriends.includes(friend.id);
+                            {meeting.participants?.map((participant) => {
+                              const isCurrentUser = participant.userId === user?.id;
+                              const isFriend = friends.some(f => f.id === participant.userId);
+                              const isParticipantHost = participant.userId === meeting.hostUserId;
 
                               return (
                                 <div
-                                  key={friend.id}
-                                  className="flex items-center gap-3 p-2 hover:bg-accent rounded-md transition-colors"
+                                  key={participant.userId}
+                                  className="flex items-center gap-3 p-2 rounded-md bg-accent/30"
                                 >
-                                  <Checkbox
-                                    id={`friend-${friend.id}`}
-                                    checked={isCurrentlyInvited}
-                                    onCheckedChange={() =>
-                                      isEditable &&
-                                      setSelectedFriends((prev) =>
-                                        prev.includes(friend.id)
-                                          ? prev.filter(
-                                              (id) => id !== friend.id
-                                            )
-                                          : [...prev, friend.id]
-                                      )
-                                    }
-                                    disabled={!isEditable}
-                                  />
-                                  <Label
-                                    htmlFor={`friend-${friend.id}`}
-                                    className="flex items-center gap-2 flex-1 cursor-pointer"
-                                  >
-                                    {friend.profileImageUrl && (
-                                      <img
-                                        src={
-                                          friend.profileImageUrl ||
-                                          '/placeholder.svg'
-                                        }
-                                        alt={friend.nickname}
-                                        className="w-8 h-8 rounded-full object-cover"
-                                      />
-                                    )}
-                                    <div className="flex flex-col">
-                                      <span className="font-medium">
-                                        {friend.nickname}
+                                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-sm flex-shrink-0">
+                                    {participant.name?.[0] ?? '?'}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-sm font-medium text-foreground truncate">
+                                        {participant.name}
                                       </span>
-                                      {isCurrentlyInvited && (
-                                        <span className="text-xs text-muted-foreground">
-                                          참여 중/초대됨
-                                        </span>
+                                      {isParticipantHost && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">호스트</span>
+                                      )}
+                                      {isCurrentUser && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">나</span>
                                       )}
                                     </div>
-                                  </Label>
+                                    <p className="text-xs text-muted-foreground">
+                                      {participant.status === 'ACCEPTED' ? '참여 확정' : '응답 대기'}
+                                    </p>
+                                  </div>
+                                  {!isCurrentUser && !isFriend && !isParticipantHost && (
+                                    <button
+                                      onClick={() => router.push('/friends')}
+                                      className="text-xs text-primary hover:underline flex-shrink-0 px-2 py-1 rounded-md hover:bg-primary/5 transition-colors"
+                                    >
+                                      친구 추가
+                                    </button>
+                                  )}
+                                  {!isCurrentUser && isFriend && (
+                                    <span className="text-[10px] text-muted-foreground flex-shrink-0">친구</span>
+                                  )}
                                 </div>
                               );
                             })}
@@ -677,7 +663,7 @@ export default function MeetingSettingsPage({
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {1 + selectedFriends.length}명 참여자 (호스트 포함)
+                        {meeting.participants?.length ?? 0}명 참여 중 · 새 참여자 초대는 상세 페이지의 초대 코드를 사용하세요
                       </p>
                     </div>
                   </div>

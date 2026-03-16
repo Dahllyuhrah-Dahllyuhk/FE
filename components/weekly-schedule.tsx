@@ -120,9 +120,11 @@ export function WeeklySchedule() {
         setTimetables(data);
 
         if (data.length === 0) {
-          response = await fetch(`${API_BASE}/api/timetables?name=내 시간표`, {
+          response = await fetch(`${API_BASE}/api/timetables`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
+            body: JSON.stringify({ name: '내 시간표' }),
           });
           if (response.ok) {
             const newTimetable: Timetable = await response.json();

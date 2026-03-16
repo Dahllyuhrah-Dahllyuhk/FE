@@ -38,7 +38,7 @@ export default function HomePage() {
 
   const isMobile = useIsMobile();
 
-  const { trigger } = useEventRefresh();
+  const { trigger, refresh } = useEventRefresh();
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
@@ -95,17 +95,38 @@ export default function HomePage() {
 
   useEffect(() => {
     const sseUrl = `${API_BASE}/api/sse/events`;
-    const es = new EventSource(sseUrl);
+    let es: EventSource;
+    let retryTimeout: ReturnType<typeof setTimeout>;
 
-    es.onerror = () => {
-      console.warn('[v0] SSE 연결 끊김 - 캘린더 갱신 필요');
-      es.close();
+    const connect = () => {
+      es = new EventSource(sseUrl, { withCredentials: true });
+
+      es.addEventListener('events-updated', () => {
+        refresh();
+      });
+
+      es.onerror = () => {
+        es.close();
+        // 5초 후 재연결 시도
+        retryTimeout = setTimeout(connect, 5000);
+      };
     };
+
+    connect();
+
+    // 30초 폴링: 로컬 환경이나 웹훅 미수신 시 보조 동기화
+    const pollInterval = setInterval(() => {
+      fetch(`${API_BASE}/api/calendar/sync`, { method: 'POST', credentials: 'include' })
+        .then((r) => { if (r.ok) refresh(); })
+        .catch(() => {});
+    }, 30000);
 
     return () => {
-      es.close();
+      clearTimeout(retryTimeout);
+      clearInterval(pollInterval);
+      es?.close();
     };
-  }, []);
+  }, [refresh]);
 
   const handleMonthChange = useCallback(
     async (months: Date[]) => {
