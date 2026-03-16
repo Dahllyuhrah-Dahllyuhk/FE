@@ -277,3 +277,11 @@ export async function joinMeetingByCode(inviteCode: string): Promise<Meeting> {
   });
   return res.json();
 }
+
+export async function addFriendByUserId(targetUserId: string): Promise<FriendDto> {
+  const res = await apiFetch('/api/friends/add-by-user', {
+    method: 'POST',
+    body: JSON.stringify({ userId: targetUserId }),
+  });
+  return res.json();
+}

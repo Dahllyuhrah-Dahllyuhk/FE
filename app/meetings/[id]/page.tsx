@@ -21,7 +21,7 @@ import { useAuth } from '@/context/auth-context';
 import {
   fetchMeeting, deleteMeeting, acceptMeetingInvitation,
   updateParticipantSettings, getMeetingInviteCode,
-  updateMeetingState, fetchFriends, fetchMyInviteCode,
+  updateMeetingState, fetchFriends, addFriendByUserId,
 } from '@/lib/api';
 import type { Meeting, MeetingStatus } from '@/types/meeting';
 import type { FriendDto } from '@/lib/api';
@@ -80,8 +80,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [friends, setFriends] = useState<FriendDto[]>([]);
-  const [myInviteCode, setMyInviteCode] = useState<string | null>(null);
-  const [showMyCodeDialog, setShowMyCodeDialog] = useState(false);
+  const [addingFriendId, setAddingFriendId] = useState<string | null>(null);
 
   // 상태 변경 관련
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -109,6 +108,21 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
     load();
     fetchFriends().then(setFriends).catch(() => {});
   }, [id]);
+
+  const handleAddFriend = async (targetUserId: string) => {
+    setAddingFriendId(targetUserId);
+    try {
+      await addFriendByUserId(targetUserId);
+      setFriends((prev) => [...prev]); // 목록 갱신 트리거
+      fetchFriends().then(setFriends).catch(() => {});
+      toast({ title: '친구가 되었습니다!' });
+    } catch (e: any) {
+      const msg = e?.message?.includes('이미 친구') ? '이미 친구입니다.' : '친구추가에 실패했습니다.';
+      toast({ title: msg, variant: 'destructive' });
+    } finally {
+      setAddingFriendId(null);
+    }
+  };
 
   const handleDelete = async () => {
     if (!meeting) return;
@@ -486,11 +500,12 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                           </div>
                           {!isSelf && !isFriend && (
                             <button
-                              onClick={handleShowMyCode}
-                              className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                              onClick={() => handleAddFriend(p.userId)}
+                              disabled={addingFriendId === p.userId}
+                              className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium disabled:opacity-50"
                             >
                               <UserPlus className="h-3 w-3" />
-                              친구추가
+                              {addingFriendId === p.userId ? '추가 중...' : '친구추가'}
                             </button>
                           )}
                         </div>
@@ -519,11 +534,12 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                           </div>
                           {!isSelf && !isFriend && (
                             <button
-                              onClick={handleShowMyCode}
-                              className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                              onClick={() => handleAddFriend(p.userId)}
+                              disabled={addingFriendId === p.userId}
+                              className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium disabled:opacity-50"
                             >
                               <UserPlus className="h-3 w-3" />
-                              친구추가
+                              {addingFriendId === p.userId ? '추가 중...' : '친구추가'}
                             </button>
                           )}
                         </div>
@@ -689,36 +705,6 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── 내 초대코드 공유 다이얼로그 ── */}
-      <Dialog open={showMyCodeDialog} onOpenChange={setShowMyCodeDialog}>
-        <DialogContent className="rounded-2xl max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-base">내 초대코드 공유</DialogTitle>
-            <DialogDescription className="text-xs">
-              상대방이 친구 탭에서 이 코드를 입력하면 친구가 됩니다.
-            </DialogDescription>
-          </DialogHeader>
-          {myInviteCode && (
-            <div className="flex items-center gap-2 p-3 bg-muted/40 rounded-xl border border-border/40 my-2">
-              <code className="flex-1 text-center text-lg font-mono font-bold tracking-widest text-foreground">
-                {myInviteCode}
-              </code>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(myInviteCode);
-                  toast({ title: '복사됨' });
-                }}
-                className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-          <DialogFooter>
-            <Button size="sm" onClick={() => setShowMyCodeDialog(false)}>닫기</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </ProtectedRoute>
   );
 }

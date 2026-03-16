@@ -957,20 +957,7 @@ export function Calendar({
                               )}
                             </div>
 
-                            {/* 모바일 점 표시 */}
-                            {isMobile && allEventsForCell.length > 0 && (
-                              <div className="flex flex-wrap gap-0.5 px-1.5 mt-0.5">
-                                {allEventsForCell.slice(0, 5).map((evt, idx) => (
-                                  <div
-                                    key={`dot-${evt.id}-${idx}`}
-                                    className={`w-1.5 h-1.5 rounded-full ${evt.color}`}
-                                  />
-                                ))}
-                                {allEventsForCell.length > 5 && (
-                                  <span className="text-[9px] text-muted-foreground">+{allEventsForCell.length - 5}</span>
-                                )}
-                              </div>
-                            )}
+
 
                             {/* +N개 더보기 */}
                             {!isMobile && hidden > 0 && (

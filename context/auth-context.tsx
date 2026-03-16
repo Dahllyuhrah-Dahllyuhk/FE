@@ -71,6 +71,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     })();
   }, [fetchMe]);
 
+  // 로그인 완료 후 sessionStorage에 저장된 redirect 경로로 이동
+  useEffect(() => {
+    if (isLoading || !user) return;
+    if (typeof window === 'undefined') return;
+
+    const redirectTo = sessionStorage.getItem('login_redirect');
+    if (redirectTo) {
+      sessionStorage.removeItem('login_redirect');
+      // 현재 이미 해당 경로에 있지 않을 때만 이동
+      if (pathname !== redirectTo && pathname === '/') {
+        router.replace(redirectTo);
+      }
+    }
+  }, [isLoading, user]); // eslint-disable-line
+
   // ✅ 수정된 로그아웃 함수
   const logout = useCallback(async () => {
     try {
@@ -89,14 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // 로그인 필요 페이지 보호 ("/login"은 예외)
-  useEffect(() => {
-    if (isLoading) return;
-
-    if (!user && pathname !== '/login') {
-      router.replace('/login');
-    }
-  }, [isLoading, user, pathname, router]);
+  // 로그인 필요 페이지 보호는 ProtectedRoute 컴포넌트에서 처리
 
   return (
     <AuthContext.Provider
