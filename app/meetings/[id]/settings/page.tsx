@@ -196,6 +196,7 @@ export default function MeetingSettingsPage({
         }
       } catch (error) {
         console.error('Failed to load meeting', error);
+        toast({ title: '모임 정보를 불러오지 못했습니다.', variant: 'destructive' });
         toast({
           title: '로드 실패',
           description: '모임 정보를 불러오는데 실패했습니다.',
@@ -255,6 +256,7 @@ export default function MeetingSettingsPage({
       }
     } catch (error) {
       console.error('Failed to update meeting status', error);
+      toast({ title: '상태 변경에 실패했습니다.', variant: 'destructive' });
       toast({
         title: '상태 변경 실패',
         description: '모임 상태를 변경하는데 실패했습니다.',
@@ -370,6 +372,7 @@ export default function MeetingSettingsPage({
       router.back();
     } catch (error) {
       console.error('Failed to save settings', error);
+      toast({ title: '설정 저장에 실패했습니다.', variant: 'destructive' });
       toast({
         title: '저장 실패',
         description: '설정을 저장하는데 실패했습니다.',

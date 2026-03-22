@@ -21,6 +21,7 @@ import { mapRawToCalendarEvent } from '@/lib/calendar-utils';
 import type { RawCalendarEvent, Event } from '@/types/calendar';
 import { useEventRefresh } from '@/hooks/useEventRefresh';
 import { fetchEvents } from '@/app/api/calendar/calendar';
+import { useToast } from '@/hooks/use-toast';
 
 export default function HomePage() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -37,8 +38,8 @@ export default function HomePage() {
   const [colorMap, setColorMap] = useState<Map<string, string>>(new Map());
 
   const isMobile = useIsMobile();
-
   const { trigger, refresh } = useEventRefresh();
+  const { toast } = useToast();
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
@@ -135,6 +136,14 @@ export default function HomePage() {
         refresh();
       });
 
+      es.addEventListener('google-reauth-required', () => {
+        toast({
+          title: '구글 캘린더 재연동 필요',
+          description: '구글 계정 연동이 만료되었습니다. 동기화 버튼을 눌러 다시 연동해주세요.',
+          variant: 'destructive',
+        });
+      });
+
       es.onerror = () => {
         es.close();
         retryTimeout = setTimeout(connect, 5000);
@@ -205,7 +214,7 @@ export default function HomePage() {
             });
           }
         } catch (err) {
-          console.warn('[v0] 추가 이벤트 로드 실패:', err);
+          console.warn('추가 이벤트 로드 실패:', err);
         }
       }, 300);
     },
@@ -313,9 +322,8 @@ export default function HomePage() {
         );
       }
     } catch (err: any) {
-      console.error('[v0] 이벤트 저장 실패:', err);
-      setError(err?.message ?? '일정 저장 중 오류가 발생했습니다');
-      setEvents(previousEvents);
+      console.error('이벤트 저장 실패:', err);
+      setError(err?.message ?? '일정 저장 중 오류가 발생했습니다');      setEvents(previousEvents);
     } finally {
       setSelectedEvent(null);
       setSelectedDateRange(null);
@@ -342,9 +350,8 @@ export default function HomePage() {
         return next;
       });
     } catch (err: any) {
-      console.error('[v0] 이벤트 삭제 실패:', err);
-      setError(err?.message ?? '삭제 중 오류가 발생했습니다');
-      setEvents(previousEvents);
+      console.error('이벤트 삭제 실패:', err);
+      setError(err?.message ?? '삭제 중 오류가 발생했습니다');      setEvents(previousEvents);
     }
   };
 

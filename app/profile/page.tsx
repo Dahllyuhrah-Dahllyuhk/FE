@@ -11,6 +11,7 @@ import {
   CalendarCheck, CalendarClock, ChevronRight, Star,
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
+import { toast } from '@/hooks/use-toast';
 
 export type TimeSlot = 'DAWN' | 'MORNING' | 'AFTERNOON' | 'EVENING';
 export interface TimeSlotStat { slot: TimeSlot; count: number; }
@@ -68,8 +69,10 @@ export default function ProfilePage() {
           setStats({ upcomingCount: d.upcomingCount, thisMonthMeetingCount: d.thisMonthMeetingCount, timeSlotStats: d.timeSlotStats ?? [] });
         }
         if (r2.ok) setPartners(await r2.json());
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
+      } catch (e) {
+        console.error(e);
+        toast({ title: '통계를 불러오지 못했습니다.', variant: 'destructive' });
+      } finally { setLoading(false); }
     }
     load();
   }, []);

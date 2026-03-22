@@ -54,14 +54,10 @@ export default function FriendsPage() {
 
         if (friendsRes.status === 'fulfilled') {
           setFriends(friendsRes.value);
-        } else {
-          console.error('친구 목록 불러오기 실패', friendsRes.reason);
         }
 
         if (inviteRes.status === 'fulfilled') {
           setMyInviteCode(inviteRes.value.code);
-        } else {
-          console.error('초대코드 불러오기 실패', inviteRes.reason);
         }
       } finally {
         setFriendsLoading(false);

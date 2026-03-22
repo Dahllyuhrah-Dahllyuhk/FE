@@ -1,28 +1,26 @@
 'use client';
 
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/auth-context';
 import { API_BASE } from '@/lib/api';
+import Link from 'next/link';
 
 function LoginPageContent() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const redirect = searchParams.get('redirect') || '/';
+  const [ageChecked, setAgeChecked] = useState(false);
 
   useEffect(() => {
     if (!isLoading && user) {
-      // 이미 로그인된 경우 redirect 경로로 이동
       router.replace(redirect);
     }
   }, [isLoading, user, router, redirect]);
 
   const kakaoLogin = () => {
-    // 카카오 로그인 후 BE가 FRONTEND_ORIGIN으로 리다이렉트하므로
-    // redirect 경로를 sessionStorage에 저장해두고 복귀 후 처리
+    if (!ageChecked) return;
     if (redirect && redirect !== '/') {
       sessionStorage.setItem('login_redirect', redirect);
     }
@@ -45,6 +43,23 @@ function LoginPageContent() {
 
         {/* 로그인 버튼 */}
         <div className="space-y-3">
+          {/* 만 14세 이상 확인 */}
+          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={ageChecked}
+              onChange={(e) => setAgeChecked(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer flex-shrink-0"
+            />
+            <span className="text-xs text-muted-foreground leading-relaxed">
+              만 14세 이상이며{' '}
+              <Link href="/terms" className="underline hover:text-foreground">이용약관</Link>
+              {' '}및{' '}
+              <Link href="/privacy" className="underline hover:text-foreground">개인정보처리방침</Link>
+              에 동의합니다.
+            </span>
+          </label>
+
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <div className="h-5 w-5 rounded-full border-2 border-primary border-r-transparent animate-spin" />
@@ -52,16 +67,17 @@ function LoginPageContent() {
           ) : (
             <button
               onClick={kakaoLogin}
-              className="w-full flex items-center justify-center gap-3 h-12 rounded-2xl bg-[#FEE500] text-[#3C1E1E] font-semibold text-sm hover:bg-[#FAD400] active:scale-[0.98] transition-all shadow-sm"
+              disabled={!ageChecked}
+              className="w-full disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path fillRule="evenodd" clipRule="evenodd" d="M9 0C4.029 0 0 3.186 0 7.12c0 2.544 1.695 4.778 4.245 6.055L3.18 17.01a.375.375 0 0 0 .551.415L8.505 14.2c.162.01.325.016.495.016 4.971 0 9-3.187 9-7.12C18 3.186 13.971 0 9 0z" fill="#3C1E1E"/>
-              </svg>
-              카카오로 시작하기
+              <img
+                src="/kakao_login.png"
+                alt="카카오로 시작하기"
+                className="w-full h-auto"
+              />
             </button>
           )}
 
-          {/* 초대 링크로 온 경우 안내 */}
           {redirect.includes('/meetings/join') && (
             <div className="rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 text-center">
               <p className="text-xs text-primary font-medium">
@@ -70,10 +86,6 @@ function LoginPageContent() {
             </div>
           )}
         </div>
-
-        <p className="text-center text-xs text-muted-foreground/60">
-          로그인 시 서비스 이용약관에 동의하게 됩니다
-        </p>
       </div>
     </div>
   );

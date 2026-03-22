@@ -1,4 +1,3 @@
-// FE/lib/api.ts
 import type { RawCalendarEvent } from '@/types/calendar';
 import type {
   Meeting,
@@ -44,9 +43,15 @@ async function apiFetch(input: string, init?: RequestInit) {
   }
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error('API error', res.status, text);
-    throw new Error(`API_ERROR_${res.status}`);
+    let errorMessage = `API_ERROR_${res.status}`;
+    try {
+      const data = await res.json();
+      errorMessage = data?.message || data?.error || errorMessage;
+    } catch {
+      const text = await res.text().catch(() => '');
+      if (text) errorMessage = text;
+    }
+    throw new Error(errorMessage);
   }
 
   return res;

@@ -179,6 +179,7 @@ export function MeetingCalendar({
       setDailyStats(stats);
     } catch (error) {
       console.error('Failed to load daily availability', error);
+      toast({ title: '가용 시간 정보를 불러오지 못했습니다.', variant: 'destructive' });
     }
   }, [meeting.id]);
 
@@ -411,6 +412,7 @@ export function MeetingCalendar({
       await loadDailyAvailability();
     } catch (error) {
       console.error('Failed to batch update availability', error);
+      toast({ title: '시간 업데이트에 실패했습니다.', variant: 'destructive' });
       toast({
         title: '업데이트 실패',
         description: '일정을 업데이트하지 못했습니다.',
