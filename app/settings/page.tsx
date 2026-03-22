@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/context/auth-context';
 import { ProtectedRoute } from '@/components/protected-route';
 import { BottomNav } from '@/components/bottom-nav';
 import { Switch } from '@/components/ui/switch';
 import {
-  ChevronRight, Bell, Moon, Globe, Lock, HelpCircle, LogOut,
+  ChevronRight, Bell, Moon, Globe, Lock, HelpCircle, LogOut, UserX, ExternalLink,
 } from 'lucide-react';
 
 function SettingRow({
@@ -48,10 +49,24 @@ function SettingRow({
 import type React from 'react';
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { logout } = useAuth();
+  const { logout, withdraw } = useAuth();
   const [pushNotifications, setPushNotifications] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(false);
+  const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  const handleWithdraw = async () => {
+    if (withdrawing) return;
+    setWithdrawing(true);
+    try {
+      await withdraw();
+    } catch {
+      setWithdrawing(false);
+      setShowWithdrawConfirm(false);
+    }
+  };
 
   return (
     <ProtectedRoute>
@@ -123,9 +138,13 @@ export default function SettingsPage() {
             <div className="notion-card px-4">
               <SettingRow
                 icon={Lock}
-                label="개인정보 보호"
-                description="보안 및 개인정보 설정"
-                onClick={() => {}}
+                label="개인정보처리방침"
+                onClick={() => router.push('/privacy')}
+              />
+              <SettingRow
+                icon={ExternalLink}
+                label="이용약관"
+                onClick={() => router.push('/terms')}
               />
               <SettingRow
                 icon={HelpCircle}
@@ -144,6 +163,39 @@ export default function SettingsPage() {
             <LogOut className="h-4 w-4" />
             로그아웃
           </button>
+
+          {/* 회원 탈퇴 */}
+          {!showWithdrawConfirm ? (
+            <button
+              onClick={() => setShowWithdrawConfirm(true)}
+              className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-muted-foreground rounded-xl hover:text-destructive transition-colors"
+            >
+              <UserX className="h-4 w-4" />
+              회원 탈퇴
+            </button>
+          ) : (
+            <div className="rounded-xl border border-destructive/30 p-4 space-y-3">
+              <p className="text-sm font-semibold text-destructive text-center">정말 탈퇴하시겠어요?</p>
+              <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                탈퇴 시 모든 데이터(모임, 일정, 친구 관계)가 즉시 삭제되며 복구할 수 없습니다.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowWithdrawConfirm(false)}
+                  className="flex-1 py-2.5 text-sm font-medium rounded-lg border border-border hover:bg-accent transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleWithdraw}
+                  disabled={withdrawing}
+                  className="flex-1 py-2.5 text-sm font-medium rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-60"
+                >
+                  {withdrawing ? '처리 중...' : '탈퇴하기'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <p className="text-center text-xs text-muted-foreground/50 pb-2">맞춰봄 v1.0</p>
         </main>

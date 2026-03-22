@@ -1,4 +1,3 @@
-// FE/src/api/calendar.ts
 import type { RawCalendarEvent } from '@/types/calendar';
 
 const BE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8080';

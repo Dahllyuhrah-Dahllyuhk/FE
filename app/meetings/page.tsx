@@ -32,6 +32,7 @@ export default function MeetingsPage() {
         setMeetings(data);
       } catch (error) {
         console.error('Failed to fetch meetings', error);
+        toast({ title: '모임 목록을 불러오지 못했습니다.', variant: 'destructive' });
       } finally {
         setIsLoading(false);
       }

@@ -84,6 +84,7 @@ const DAY_NAMES = [
 ];
 
 export function WeeklySchedule() {
+  const { toast } = useToast();
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [timetables, setTimetables] = useState<Timetable[]>([]);
   const [timetableId, setTimetableId] = useState<string>('');
@@ -101,7 +102,6 @@ export function WeeklySchedule() {
   const [isEditingTimetable, setIsEditingTimetable] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
-  const { toast } = useToast();
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
@@ -140,6 +140,7 @@ export function WeeklySchedule() {
       }
     } catch (error) {
       console.error('Failed to fetch timetables:', error);
+      toast({ title: '시간표를 불러오지 못했습니다.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -253,6 +254,7 @@ export function WeeklySchedule() {
       setEditingSlot(null);
     } catch (error) {
       console.error('Failed to save time slot:', error);
+      toast({ title: '시간표 저장에 실패했습니다.', variant: 'destructive' });
       toast({
         title: '오류가 발생했습니다',
         description: '다시 시도해주세요',

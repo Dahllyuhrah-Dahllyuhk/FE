@@ -23,6 +23,7 @@ type AuthContextType = {
   isLoading: boolean;
   refreshUser: () => Promise<void>;
   logout: () => void;
+  withdraw: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,7 +54,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createdAt: data.createdAt
       });
     } catch (e) {
-      console.error('auth /api/auth/me error', e);
+      // 인증 실패 — 조용히 처리 (미로그인 상태는 정상)
       setUser(null);
     }
   }, []);
@@ -106,6 +107,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // 로그인 필요 페이지 보호는 ProtectedRoute 컴포넌트에서 처리
 
+  const withdraw = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('탈퇴 요청 실패');
+    } catch (e) {
+      console.error('Withdraw failed', e);
+      throw e;
+    } finally {
+      setUser(null);
+      window.location.href = '/login';
+    }
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -113,6 +130,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading,
         refreshUser,
         logout,
+        withdraw,
       }}
     >
       {children}
