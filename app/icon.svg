@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 배경 -->
+  <rect width="32" height="32" rx="7" ry="7" fill="url(#bg)"/>
+
+  <!-- 캘린더 본체 -->
+  <rect x="5" y="9" width="22" height="18" rx="2.5" fill="white" opacity="0.95"/>
+
+  <!-- 헤더 바 -->
+  <rect x="5" y="9" width="22" height="6" rx="2.5" fill="#6366f1"/>
+  <rect x="5" y="13" width="22" height="2" fill="#6366f1"/>
+
+  <!-- 고리 왼쪽 -->
+  <rect x="10" y="6" width="2.5" height="5" rx="1.25" fill="white" opacity="0.9"/>
+  <!-- 고리 오른쪽 -->
+  <rect x="19.5" y="6" width="2.5" height="5" rx="1.25" fill="white" opacity="0.9"/>
+
+  <!-- 날짜 그리드 행1 -->
+  <rect x="7"  y="17" width="3" height="3" rx="0.75" fill="#e0e7ff"/>
+  <rect x="11" y="17" width="3" height="3" rx="0.75" fill="#6366f1"/>
+  <rect x="15" y="17" width="3" height="3" rx="0.75" fill="#e0e7ff"/>
+  <rect x="19" y="17" width="3" height="3" rx="0.75" fill="#e0e7ff"/>
+
+  <!-- 날짜 그리드 행2 -->
+  <rect x="7"  y="21.5" width="3" height="3" rx="0.75" fill="#e0e7ff"/>
+  <rect x="11" y="21.5" width="3" height="3" rx="0.75" fill="#e0e7ff"/>
+  <rect x="15" y="21.5" width="3" height="3" rx="0.75" fill="#6366f1"/>
+  <rect x="19" y="21.5" width="3" height="3" rx="0.75" fill="#e0e7ff"/>
+
+  <!-- 체크 배지 -->
+  <circle cx="25" cy="25" r="5.5" fill="#22c55e"/>
+  <polyline points="22.2,25 24,26.8 27.8,23" fill="none" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,3 +1,5 @@
+import { BackButton } from '@/components/back-button';
+
 export const metadata = {
   title: '개인정보처리방침 | 맞춰봄',
 };
@@ -5,6 +7,7 @@ export const metadata = {
 export default function PrivacyPage() {
   return (
     <main className="max-w-3xl mx-auto px-6 py-12 text-sm leading-relaxed">
+      <BackButton />
       <h1 className="text-2xl font-bold mb-2">개인정보처리방침</h1>
       <p className="text-muted-foreground mb-8 text-xs">시행일: 2025년 3월 21일</p>
 

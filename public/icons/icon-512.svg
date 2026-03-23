@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 배경 -->
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+  <rect width="512" height="256" rx="112" ry="112" fill="url(#shine)"/>
+
+  <!-- 캘린더 본체 -->
+  <rect x="86" y="138" width="340" height="288" rx="36" ry="36" fill="white" opacity="0.95"/>
+
+  <!-- 캘린더 헤더 -->
+  <rect x="86" y="138" width="340" height="90" rx="36" ry="36" fill="#6366f1"/>
+  <rect x="86" y="192" width="340" height="36" fill="#6366f1"/>
+
+  <!-- 고리 왼쪽 -->
+  <rect x="166" y="100" width="32" height="74" rx="16" ry="16" fill="white" opacity="0.9"/>
+  <!-- 고리 오른쪽 -->
+  <rect x="314" y="100" width="32" height="74" rx="16" ry="16" fill="white" opacity="0.9"/>
+
+  <!-- 날짜 그리드 행1 -->
+  <rect x="108" y="254" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="168" y="254" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="228" y="254" width="44" height="44" rx="10" fill="#6366f1"/>
+  <rect x="288" y="254" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="348" y="254" width="44" height="44" rx="10" fill="#e0e7ff"/>
+
+  <!-- 날짜 그리드 행2 -->
+  <rect x="108" y="312" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="168" y="312" width="44" height="44" rx="10" fill="#6366f1"/>
+  <rect x="228" y="312" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="288" y="312" width="44" height="44" rx="10" fill="#6366f1"/>
+  <rect x="348" y="312" width="44" height="44" rx="10" fill="#e0e7ff"/>
+
+  <!-- 날짜 그리드 행3 -->
+  <rect x="108" y="370" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="168" y="370" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="228" y="370" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="288" y="370" width="44" height="44" rx="10" fill="#e0e7ff"/>
+  <rect x="348" y="370" width="44" height="44" rx="10" fill="#6366f1"/>
+
+  <!-- 체크 배지 -->
+  <circle cx="392" cy="392" r="52" fill="#22c55e"/>
+  <polyline points="368,392 384,410 416,374" fill="none" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

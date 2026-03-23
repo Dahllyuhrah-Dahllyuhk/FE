@@ -172,7 +172,7 @@ export default function ProfilePage() {
               {/* 주간 일정 */}
               <section>
                 <p className="section-title">주간 시간표</p>
-                <div className="notion-card p-4">
+                <div className="notion-card px-3 py-4">
                   <WeeklySchedule />
                 </div>
               </section>

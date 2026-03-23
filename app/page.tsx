@@ -21,7 +21,6 @@ import { mapRawToCalendarEvent } from '@/lib/calendar-utils';
 import type { RawCalendarEvent, Event } from '@/types/calendar';
 import { useEventRefresh } from '@/hooks/useEventRefresh';
 import { fetchEvents } from '@/app/api/calendar/calendar';
-import { useToast } from '@/hooks/use-toast';
 
 export default function HomePage() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -39,7 +38,6 @@ export default function HomePage() {
 
   const isMobile = useIsMobile();
   const { trigger, refresh } = useEventRefresh();
-  const { toast } = useToast();
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
@@ -95,6 +93,7 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
+  // SSE 부분 패치 — events-changed 이벤트만 여기서 처리 (전체 새로고침은 useSseSync가 담당)
   useEffect(() => {
     const sseUrl = `${API_BASE}/api/sse/events`;
     let es: EventSource;
@@ -103,7 +102,6 @@ export default function HomePage() {
     const connect = () => {
       es = new EventSource(sseUrl, { withCredentials: true });
 
-      // 개별 이벤트 변경 — 전체 재로드 없이 state만 패치
       es.addEventListener('events-changed', (e: MessageEvent) => {
         try {
           const { changed, deletedIds } = JSON.parse(e.data) as {
@@ -127,21 +125,8 @@ export default function HomePage() {
             return next;
           });
         } catch {
-          refresh(); // 파싱 실패 시 전체 새로고침 fallback
+          refresh();
         }
-      });
-
-      // 전체 새로고침 fallback (수동 동기화 버튼 등)
-      es.addEventListener('events-updated', () => {
-        refresh();
-      });
-
-      es.addEventListener('google-reauth-required', () => {
-        toast({
-          title: '구글 캘린더 재연동 필요',
-          description: '구글 계정 연동이 만료되었습니다. 동기화 버튼을 눌러 다시 연동해주세요.',
-          variant: 'destructive',
-        });
       });
 
       es.onerror = () => {

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- 배경: 둥근 사각형, 인디고 그라디언트 -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.15"/>
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 배경 -->
+  <rect width="192" height="192" rx="42" ry="42" fill="url(#bg)"/>
+  <!-- 광택 레이어 -->
+  <rect width="192" height="96" rx="42" ry="42" fill="url(#shine)"/>
+
+  <!-- 캘린더 본체 -->
+  <rect x="32" y="52" width="128" height="108" rx="14" ry="14" fill="white" opacity="0.95"/>
+
+  <!-- 캘린더 헤더 바 -->
+  <rect x="32" y="52" width="128" height="34" rx="14" ry="14" fill="#6366f1"/>
+  <rect x="32" y="72" width="128" height="14" fill="#6366f1"/>
+
+  <!-- 고리 (왼쪽) -->
+  <rect x="62" y="38" width="12" height="28" rx="6" ry="6" fill="white" opacity="0.9"/>
+  <!-- 고리 (오른쪽) -->
+  <rect x="118" y="38" width="12" height="28" rx="6" ry="6" fill="white" opacity="0.9"/>
+
+  <!-- 날짜 그리드 - 행1 -->
+  <rect x="48" y="100" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="72" y="100" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="96" y="100" width="16" height="16" rx="4" fill="#6366f1"/>
+  <rect x="120" y="100" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="144" y="100" width="16" height="16" rx="4" fill="#e0e7ff"/>
+
+  <!-- 날짜 그리드 - 행2 -->
+  <rect x="48" y="122" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="72" y="122" width="16" height="16" rx="4" fill="#6366f1"/>
+  <rect x="96" y="122" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="120" y="122" width="16" height="16" rx="4" fill="#6366f1"/>
+  <rect x="144" y="122" width="16" height="16" rx="4" fill="#e0e7ff"/>
+
+  <!-- 날짜 그리드 - 행3 -->
+  <rect x="48" y="144" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="72" y="144" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="96" y="144" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="120" y="144" width="16" height="16" rx="4" fill="#e0e7ff"/>
+  <rect x="144" y="144" width="16" height="16" rx="4" fill="#6366f1"/>
+
+  <!-- 체크 아이콘 (확정 느낌) - 오른쪽 하단 -->
+  <circle cx="148" cy="148" r="18" fill="#22c55e"/>
+  <polyline points="139,148 145,154 157,142" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
