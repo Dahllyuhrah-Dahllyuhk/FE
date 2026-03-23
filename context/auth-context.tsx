@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { API_BASE } from '@/lib/api';
+import { useSseSync } from '@/hooks/useSseSync';
 
 type User = {
   id: string;
@@ -107,8 +108,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // 로그인 필요 페이지 보호는 ProtectedRoute 컴포넌트에서 처리
 
-  const withdraw = useCallback(async () => {
-    try {
+  // 로그인 상태일 때만 SSE 연결
+  useSseSync(!isLoading && !!user);
+
+  const withdraw = useCallback(async () => {    try {
       const res = await fetch(`${API_BASE}/api/auth/me`, {
         method: 'DELETE',
         credentials: 'include',
