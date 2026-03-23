@@ -8,7 +8,7 @@ import { ProtectedRoute } from '@/components/protected-route';
 import { BottomNav } from '@/components/bottom-nav';
 import { Switch } from '@/components/ui/switch';
 import {
-  ChevronRight, Bell, Moon, Globe, Lock, HelpCircle, LogOut, UserX, ExternalLink,
+  ChevronRight, Bell, Moon, Lock, Mail, LogOut, UserX, ExternalLink,
 } from 'lucide-react';
 
 function SettingRow({
@@ -52,8 +52,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { logout, withdraw } = useAuth();
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(false);
   const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
 
@@ -88,10 +86,10 @@ export default function SettingsPage() {
                 label="푸시 알림"
                 description="일정 및 모임 알림을 받습니다"
                 right={
-                  <Switch
-                    checked={pushNotifications}
-                    onCheckedChange={setPushNotifications}
-                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">준비 중</span>
+                    <Switch checked={false} disabled />
+                  </div>
                 }
               />
               <SettingRow
@@ -99,10 +97,10 @@ export default function SettingsPage() {
                 label="이메일 알림"
                 description="이메일로 알림을 받습니다"
                 right={
-                  <Switch
-                    checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
-                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">준비 중</span>
+                    <Switch checked={false} disabled />
+                  </div>
                 }
               />
             </div>
@@ -123,12 +121,6 @@ export default function SettingsPage() {
                   />
                 }
               />
-              <SettingRow
-                icon={Globe}
-                label="언어"
-                description="한국어"
-                onClick={() => {}}
-              />
             </div>
           </section>
 
@@ -147,10 +139,10 @@ export default function SettingsPage() {
                 onClick={() => router.push('/terms')}
               />
               <SettingRow
-                icon={HelpCircle}
-                label="도움말"
-                description="자주 묻는 질문 및 지원"
-                onClick={() => {}}
+                icon={Mail}
+                label="이메일 문의"
+                description="tjgus9139@gmail.com"
+                onClick={() => { window.location.href = 'mailto:tjgus9139@gmail.com'; }}
               />
             </div>
           </section>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Calendar, MessageSquare, Users, User } from 'lucide-react';
+import { Home, Calendar, Users, User } from 'lucide-react';
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -10,7 +10,6 @@ export function BottomNav() {
   const navItems = [
     { href: '/', icon: Home, label: '홈' },
     { href: '/meetings', icon: Calendar, label: '모임' },
-    { href: '/ai', icon: MessageSquare, label: 'AI' },
     { href: '/friends', icon: Users, label: '친구' },
     { href: '/profile', icon: User, label: '내정보' },
   ];
