@@ -419,7 +419,7 @@ export function WeeklySchedule() {
                   className="absolute w-full flex items-start justify-center pt-0.5"
                   style={{ top: `${(i / TOTAL_HOURS) * 100}%`, height: `${(1 / TOTAL_HOURS) * 100}%` }}
                 >
-                  <span className="text-[9px] font-medium text-muted-foreground/70 leading-none">
+                  <span className="text-[9px] font-medium text-foreground/60 leading-none">
                     {(HOUR_START + i).toString().padStart(2, '0')}
                   </span>
                 </div>
@@ -482,14 +482,14 @@ export function WeeklySchedule() {
                         <div className="px-1 pt-0.5 h-full flex flex-col">
                           <p
                             className="text-[10px] font-bold leading-tight truncate"
-                            style={{ color: slot.color, filter: 'brightness(0.65)' }}
+                            style={{ color: slot.color }}
                           >
                             {slot.title}
                           </p>
                           {!isShort && (
                             <p
                               className="text-[9px] leading-none mt-0.5 font-medium"
-                              style={{ color: slot.color, filter: 'brightness(0.7)', opacity: 0.9 }}
+                              style={{ color: slot.color, opacity: 0.85 }}
                             >
                               {slot.startTime}–{slot.endTime}
                             </p>

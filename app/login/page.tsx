@@ -6,32 +6,22 @@ import { useAuth } from '@/context/auth-context';
 import { API_BASE } from '@/lib/api';
 import Link from 'next/link';
 
-/** 인앱브라우저 여부 감지 */
 function detectInAppBrowser(): { isInApp: boolean; name: string } {
   if (typeof navigator === 'undefined') return { isInApp: false, name: '' };
   const ua = navigator.userAgent;
-  if (/NAVER/.test(ua)) return { isInApp: true, name: 'NAVER' };
-  if (/KAKAOTALK/.test(ua)) return { isInApp: true, name: '카카오톡' };
-  if (/Instagram/.test(ua)) return { isInApp: true, name: 'Instagram' };
-  if (/FB_IAB|FBAN|FBAV/.test(ua)) return { isInApp: true, name: 'Facebook' };
-  if (/Line\//.test(ua)) return { isInApp: true, name: 'LINE' };
+  if (/KAKAOTALK/i.test(ua)) return { isInApp: true, name: '카카오톡' };
+  if (/NAVER/i.test(ua)) return { isInApp: true, name: '네이버' };
+  if (/Instagram/i.test(ua)) return { isInApp: true, name: '인스타그램' };
+  if (/FB_IAB|FBAN|FBAV/i.test(ua)) return { isInApp: true, name: '페이스북' };
+  if (/Line\//i.test(ua)) return { isInApp: true, name: 'LINE' };
   return { isInApp: false, name: '' };
 }
 
-/** 외부 브라우저로 현재 URL 열기 시도 */
 function openInExternalBrowser() {
-  const url = window.location.href;
   const ua = navigator.userAgent;
-
-  // Android: intent scheme으로 Chrome 강제 오픈
+  const url = window.location.href;
   if (/Android/.test(ua)) {
     window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
-    return;
-  }
-
-  // iOS: 클립보드 복사 후 안내 (Safari는 intent 미지원)
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(url).catch(() => {});
   }
 }
 
@@ -56,7 +46,6 @@ function LoginPageContent() {
 
   const handleOpenExternal = () => {
     openInExternalBrowser();
-    // Android intent 실패 대비: 클립보드 복사 안내
     if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
       if (navigator.clipboard) {
         navigator.clipboard.writeText(window.location.href).then(() => {
@@ -78,7 +67,7 @@ function LoginPageContent() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-8">
-        {/* 로고 영역 */}
+        {/* 로고 */}
         <div className="flex flex-col items-center gap-3">
           <div className="h-16 w-16 rounded-3xl bg-primary/10 flex items-center justify-center">
             <span className="text-3xl">📅</span>
@@ -89,18 +78,17 @@ function LoginPageContent() {
           </div>
         </div>
 
-        {/* 인앱브라우저 감지 시 안내 배너 */}
+        {/* 인앱브라우저 안내 */}
         {inAppInfo.isInApp && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800/40 p-4 space-y-3">
             <div className="flex items-start gap-2.5">
               <span className="text-lg flex-shrink-0">⚠️</span>
               <div>
                 <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                  {inAppInfo.name} 앱에서는 구글 로그인이 제한됩니다
+                  {inAppInfo.name} 앱에서는 카카오 로그인이 제한될 수 있습니다
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 leading-relaxed">
-                  구글 정책으로 인해 인앱 브라우저에서 구글 계정 연동이 불가능합니다.
-                  카카오 로그인은 정상 이용 가능합니다.
+                  외부 브라우저에서 이용하시면 더 안정적으로 로그인할 수 있습니다.
                 </p>
               </div>
             </div>
@@ -118,7 +106,7 @@ function LoginPageContent() {
           </div>
         )}
 
-        {/* 로그인 버튼 */}
+        {/* 로그인 */}
         <div className="space-y-3">
           <label className="flex items-start gap-2.5 cursor-pointer select-none">
             <input
