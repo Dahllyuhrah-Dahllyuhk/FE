@@ -36,7 +36,14 @@ function JoinPageContent() {
       toast({ title: '모임 참여 완료!', description: `"${meeting.name}"에 참여했습니다.` });
       router.push(`/meetings/${meeting.id}`);
     } catch (e: any) {
-      const msg = e?.message ?? '참여에 실패했습니다.';
+      const msg: string = e?.message ?? '참여에 실패했습니다.';
+      // 이미 참여한 모임인 경우 해당 모임 페이지로 이동
+      const alreadyMatch = msg.match(/meetingId=([a-zA-Z0-9]+)/);
+      if (alreadyMatch) {
+        toast({ title: '이미 참여 중인 모임입니다.', description: '모임 페이지로 이동합니다.' });
+        router.push(`/meetings/${alreadyMatch[1]}`);
+        return;
+      }
       toast({ title: msg, variant: 'destructive' });
       setIsJoining(false);
     }

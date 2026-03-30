@@ -91,7 +91,7 @@ export default function CreateMeetingPage() {
 
     setIsSubmitting(true);
     try {
-      await createMeeting({
+      const created = await createMeeting({
         name: name.trim(),
         invitedUserIds: selectedFriends,
         requirement: {
@@ -104,7 +104,7 @@ export default function CreateMeetingPage() {
         defaultReflectCalendar: reflectCalendar,
       });
       toast({ title: '모임 생성 완료' });
-      router.push('/meetings');
+      router.push(`/meetings/${created.id}`);
     } catch {
       toast({ title: '모임 생성 실패', variant: 'destructive' });
     } finally {

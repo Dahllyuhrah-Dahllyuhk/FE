@@ -54,7 +54,15 @@ export default function MeetingsPage() {
       setJoinCode('');
       router.push(`/meetings/${meeting.id}`);
     } catch (e: any) {
-      toast({ title: e?.message ?? '참여에 실패했습니다.', variant: 'destructive' });
+      const msg: string = e?.message ?? '참여에 실패했습니다.';
+      const alreadyMatch = msg.match(/meetingId=([a-zA-Z0-9]+)/);
+      if (alreadyMatch) {
+        toast({ title: '이미 참여 중인 모임입니다.', description: '모임 페이지로 이동합니다.' });
+        setShowJoinModal(false);
+        router.push(`/meetings/${alreadyMatch[1]}`);
+        return;
+      }
+      toast({ title: msg, variant: 'destructive' });
     } finally {
       setIsJoining(false);
     }
@@ -173,12 +181,20 @@ export default function MeetingsPage() {
                 {searchQuery ? '검색 결과가 없습니다' : '새로운 모임을 추가해보세요'}
               </p>
               {!searchQuery && (
-                <button
-                  onClick={() => setShowJoinModal(true)}
-                  className="text-xs text-primary hover:underline"
-                >
-                  초대 코드로 모임 참여하기
-                </button>
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={() => router.push('/meetings/create')}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                  >
+                    모임 만들기
+                  </button>
+                  <button
+                    onClick={() => setShowJoinModal(true)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    초대 코드로 모임 참여하기
+                  </button>
+                </div>
               )}
             </div>
           ) : (

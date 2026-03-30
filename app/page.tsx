@@ -17,11 +17,13 @@ import {
   deleteCalendarEvent,
   API_BASE,
 } from '@/lib/api';
+import { RefreshCw } from 'lucide-react';
 import { mapRawToCalendarEvent } from '@/lib/calendar-utils';
 import type { RawCalendarEvent, Event } from '@/types/calendar';
 import { useEventRefresh } from '@/hooks/useEventRefresh';
 import { fetchEvents } from '@/app/api/calendar/calendar';
-
+import { useToast } from '@/hooks/use-toast';
+import { OnboardingBanner } from '@/components/onboarding-banner';
 export default function HomePage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,6 +40,7 @@ export default function HomePage() {
 
   const isMobile = useIsMobile();
   const { trigger, refresh } = useEventRefresh();
+  const { toast } = useToast();
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
@@ -237,6 +240,35 @@ export default function HomePage() {
   };
 
   const syncNow = () => {
+    const ua = navigator.userAgent;
+    const isInApp = /NAVER|KAKAOTALK|Instagram|FB_IAB|FBAN|FBAV|Line\//i.test(ua);
+
+    if (isInApp) {
+      // Android: Chrome으로 강제 오픈
+      if (/Android/.test(ua)) {
+        const url = window.location.href;
+        window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+        return;
+      }
+      // iOS: 클립보드 복사 후 토스트 안내
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href).then(() => {
+          toast({
+            title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
+            description: 'Safari 주소창에 방금 복사된 주소를 붙여넣기 해주세요.',
+            variant: 'destructive',
+          });
+        });
+      } else {
+        toast({
+          title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
+          description: 'Safari나 Chrome 등 외부 브라우저에서 접속 후 동기화해주세요.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+
     const base = API_BASE || 'http://localhost:8080';
     window.location.href = `${base}/oauth2/authorization/google`;
   };
@@ -351,9 +383,10 @@ export default function HomePage() {
             <div className="flex items-center gap-1">
               <button
                 onClick={syncNow}
-                className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-accent transition-colors"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-accent transition-colors"
                 title="구글 캘린더에서 최신 일정 동기화"
               >
+                <RefreshCw className="h-3.5 w-3.5" />
                 동기화
               </button>
               <ThemeToggle />
@@ -362,6 +395,7 @@ export default function HomePage() {
         </header>
 
         <main className="flex-1 overflow-y-auto">
+          <OnboardingBanner />
           <div className="px-2 pt-0 pb-4">
             {error && (
               <Alert variant="destructive" className="mb-3 whitespace-pre-line">

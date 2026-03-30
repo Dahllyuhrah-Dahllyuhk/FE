@@ -415,7 +415,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
               <div className="notion-card p-4">
                 <p className="section-title flex items-center gap-1.5 mb-3">
                   <Share2 className="h-3 w-3" />
-                  초대 코드
+                  모임 초대 코드
                 </p>
                 {inviteCode ? (
                   <div className="space-y-2">

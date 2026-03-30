@@ -13,6 +13,16 @@ import {
   type FriendDto,
 } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function FriendsPage() {
   const [friends, setFriends] = useState<FriendDto[]>([]);
@@ -24,6 +34,7 @@ export default function FriendsPage() {
   const [friendCodeInput, setFriendCodeInput] = useState('');
   const [addingFriend, setAddingFriend] = useState(false);
   const [deletingFriendId, setDeletingFriendId] = useState<string | null>(null);
+  const [confirmDeleteFriend, setConfirmDeleteFriend] = useState<FriendDto | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState('');
@@ -73,7 +84,7 @@ export default function FriendsPage() {
     try {
       await navigator.clipboard.writeText(myInviteCode);
       toast({
-        title: '초대코드 복사 완료',
+        title: '친구 코드 복사 완료',
         description: myInviteCode,
       });
     } catch {
@@ -129,39 +140,23 @@ export default function FriendsPage() {
     }
   };
 
-    const handleDeleteFriend = async (friend: FriendDto) => {
+  const handleDeleteFriend = async (friend: FriendDto) => {
     const nickname = friend.nickname ?? '친구';
-
-    // 간단 확인창
-    if (!window.confirm(`${nickname}을(를) 친구 목록에서 삭제할까요?`)) {
-      return;
-    }
-
     try {
       setDeletingFriendId(friend.id);
       await deleteFriend(friend.id);
-
-      // 프론트 목록에서도 제거
       setFriends((prev) => prev.filter((f) => f.id !== friend.id));
-
-      toast({
-        title: '친구 삭제 완료',
-        description: `${nickname}가 친구 목록에서 삭제되었어요.`,
-      });
+      toast({ title: '친구 삭제 완료', description: `${nickname}가 친구 목록에서 삭제되었어요.` });
     } catch (err) {
       console.error(err);
-      const message =
-        err instanceof Error
-          ? err.message
-          : '친구 삭제 중 오류가 발생했습니다.';
-
       toast({
         title: '친구 삭제 실패',
-        description: message,
+        description: err instanceof Error ? err.message : '친구 삭제 중 오류가 발생했습니다.',
         variant: 'destructive',
       });
     } finally {
       setDeletingFriendId(null);
+      setConfirmDeleteFriend(null);
     }
   };
 
@@ -181,7 +176,7 @@ export default function FriendsPage() {
           {/* 내 초대코드 + 친구 추가 */}
           <div className="notion-card p-4 space-y-4">
             <div>
-              <p className="section-title">내 초대코드</p>
+              <p className="section-title">내 친구 코드</p>
               <div className="flex items-center justify-between gap-3">
                 {inviteCodeLoading ? (
                   <span className="text-sm text-muted-foreground">불러오는 중...</span>
@@ -205,7 +200,7 @@ export default function FriendsPage() {
             </div>
 
             <div className="border-t border-border/40 pt-4">
-              <p className="section-title">초대코드로 추가</p>
+              <p className="section-title">친구 코드로 추가</p>
               <div className="flex gap-2">
                 <input
                   ref={inviteInputRef}
@@ -269,7 +264,7 @@ export default function FriendsPage() {
                       <button
                         type="button"
                         disabled={deletingFriendId === friend.id}
-                        onClick={() => handleDeleteFriend(friend)}
+                        onClick={() => setConfirmDeleteFriend(friend)}
                         className="text-xs text-muted-foreground hover:text-destructive disabled:opacity-40 transition-colors px-2 py-1 rounded-md hover:bg-destructive/10"
                       >
                         {deletingFriendId === friend.id ? '...' : '삭제'}
@@ -285,6 +280,31 @@ export default function FriendsPage() {
 
         <BottomNav />
       </div>
+
+      {/* 친구 삭제 확인 다이얼로그 */}
+      <AlertDialog
+        open={!!confirmDeleteFriend}
+        onOpenChange={(open) => { if (!open) setConfirmDeleteFriend(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>친구를 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDeleteFriend?.nickname ?? '이 친구'}를 친구 목록에서 삭제합니다. 되돌릴 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!deletingFriendId}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => confirmDeleteFriend && handleDeleteFriend(confirmDeleteFriend)}
+              disabled={!!deletingFriendId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingFriendId ? '삭제 중...' : '삭제'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ProtectedRoute>
   );
 }
