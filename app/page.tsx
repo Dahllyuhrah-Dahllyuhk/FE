@@ -40,6 +40,7 @@ export default function HomePage() {
 
   const isMobile = useIsMobile();
   const { trigger, refresh } = useEventRefresh();
+  const { toast } = useToast();
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
@@ -236,40 +237,6 @@ export default function HomePage() {
     setSelectedEvent(null);
     setIsEditMode(true);
     setIsDialogOpen(true);
-  };
-
-  const syncNow = () => {
-    const ua = navigator.userAgent;
-    const isInApp = /NAVER|KAKAOTALK|Instagram|FB_IAB|FBAN|FBAV|Line\//i.test(ua);
-
-    if (isInApp) {
-      // Android: Chrome으로 강제 오픈
-      if (/Android/.test(ua)) {
-        const url = window.location.href;
-        window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
-        return;
-      }
-      // iOS: 클립보드 복사 후 토스트 안내
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(window.location.href).then(() => {
-          toast({
-            title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
-            description: 'Safari 주소창에 방금 복사된 주소를 붙여넣기 해주세요.',
-            variant: 'destructive',
-          });
-        });
-      } else {
-        toast({
-          title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
-          description: 'Safari나 Chrome 등 외부 브라우저에서 접속 후 동기화해주세요.',
-          variant: 'destructive',
-        });
-      }
-      return;
-    }
-
-    const base = API_BASE || 'http://localhost:8080';
-    window.location.href = `${base}/oauth2/authorization/google`;
   };
 
   const handleSaveEvent = async (event: Event) => {
