@@ -347,6 +347,38 @@ export default function HomePage() {
     }
   };
 
+  const syncNow = () => {
+    const ua = navigator.userAgent;
+    const isInApp = /NAVER|KAKAOTALK|Instagram|FB_IAB|FBAN|FBAV|Line\//i.test(ua);
+
+    if (isInApp) {
+      if (/Android/.test(ua)) {
+        const url = window.location.href;
+        window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+        return;
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href).then(() => {
+          toast({
+            title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
+            description: 'Safari 주소창에 방금 복사된 주소를 붙여넣기 해주세요.',
+            variant: 'destructive',
+          });
+        });
+      } else {
+        toast({
+          title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
+          description: 'Safari나 Chrome 등 외부 브라우저에서 접속 후 동기화해주세요.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+
+    const base = API_BASE || 'http://localhost:8080';
+    window.location.href = `${base}/oauth2/authorization/google`;
+  };
+
   const handleDeleteEvent = async (eventId: string) => {
     const eventToDelete = events.find((e) => e.id === eventId);
     if (!eventToDelete) return;
