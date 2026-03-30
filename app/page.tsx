@@ -40,7 +40,6 @@ export default function HomePage() {
 
   const isMobile = useIsMobile();
   const { trigger, refresh } = useEventRefresh();
-  const { toast } = useToast();
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
