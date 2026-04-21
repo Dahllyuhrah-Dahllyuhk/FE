@@ -9,7 +9,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, setAccessToken, getAccessToken, exchangeAuthCode } from '@/lib/api';
 import { useSseSync } from '@/hooks/useSseSync';
 
 type User = {
@@ -38,9 +38,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchMe = useCallback(async () => {
     try {
+      const headers: Record<string, string> = {};
+      const token = getAccessToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(`${API_BASE}/api/auth/me`, {
         credentials: 'include',
+        headers,
       });
+
+      // rotate된 새 access token이 응답 헤더에 있으면 메모리에 저장
+      const newToken = res.headers.get('X-New-Access-Token');
+      if (newToken) {
+        setAccessToken(newToken);
+      }
 
       if (!res.ok) {
         setUser(null);
@@ -55,7 +66,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createdAt: data.createdAt
       });
     } catch (e) {
-      // 인증 실패 — 조용히 처리 (미로그인 상태는 정상)
       setUser(null);
     }
   }, []);
@@ -68,6 +78,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     (async () => {
+      // 로그인 후 BE가 ?code= 파라미터로 리다이렉트하면 access token 교환
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        if (code) {
+          try {
+            const token = await exchangeAuthCode(code);
+            setAccessToken(token);
+          } catch (e) {
+            console.error('Auth code exchange failed', e);
+          }
+          // URL에서 code 파라미터 제거
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, '', cleanUrl);
+        }
+      }
       await fetchMe();
       setIsLoading(false);
     })();
@@ -91,7 +117,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // ✅ 수정된 로그아웃 함수
   const logout = useCallback(async () => {
     try {
-      // 백엔드에 쿠키 삭제 요청 (POST /api/auth/logout)
       await fetch(`${API_BASE}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include',
@@ -99,9 +124,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (e) {
       console.error('Logout API call failed', e);
     } finally {
-      // 프론트엔드 상태 비우기
+      setAccessToken(null);
       setUser(null);
-      // 로그인 페이지로 이동 (새로고침 효과를 위해 window.location 사용)
       window.location.href = '/login';
     }
   }, []);
@@ -111,7 +135,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // 로그인 상태일 때만 SSE 연결
   useSseSync(!isLoading && !!user);
 
-  const withdraw = useCallback(async () => {    try {
+  const withdraw = useCallback(async () => {
+    try {
       const res = await fetch(`${API_BASE}/api/auth/me`, {
         method: 'DELETE',
         credentials: 'include',
@@ -121,6 +146,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Withdraw failed', e);
       throw e;
     } finally {
+      setAccessToken(null);
       setUser(null);
       window.location.href = '/login';
     }

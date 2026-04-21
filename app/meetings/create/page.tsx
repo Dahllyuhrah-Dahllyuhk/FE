@@ -20,6 +20,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from '@/hooks/use-toast';
 import { createMeeting, fetchFriends, type FriendDto } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -242,9 +243,12 @@ export default function CreateMeetingPage() {
                         checked={selectedFriends.includes(friend.id)}
                         onCheckedChange={() => toggleFriend(friend.id)}
                       />
-                      {friend.profileImageUrl && (
-                        <img src={friend.profileImageUrl} alt={friend.nickname} className="w-7 h-7 rounded-full object-cover" />
-                      )}
+                      <Avatar className="h-7 w-7 flex-shrink-0">
+                        <AvatarImage src={friend.profileImageUrl ?? undefined} alt={friend.nickname} />
+                        <AvatarFallback className="text-[10px] bg-primary/20 text-primary">
+                          {friend.nickname?.[0] ?? '?'}
+                        </AvatarFallback>
+                      </Avatar>
                       <span className="text-sm">{friend.nickname}</span>
                     </div>
                   ))}

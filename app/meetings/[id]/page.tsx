@@ -15,7 +15,7 @@ import { BottomNav } from '@/components/bottom-nav';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/auth-context';
 import {
@@ -475,6 +475,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                         <div key={p.userId} className="flex items-center gap-2">
                           <div className="flex flex-1 items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-green-50 dark:bg-green-900/20 border border-green-200/60 dark:border-green-800/40 min-w-0">
                             <Avatar className="h-5 w-5 flex-shrink-0">
+                              <AvatarImage src={p.profileImageUrl ?? undefined} alt={p.name} />
                               <AvatarFallback className="text-[10px] bg-green-500 text-white">
                                 {p.name?.[0] ?? '?'}
                               </AvatarFallback>
@@ -513,6 +514,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
                         <div key={p.userId} className="flex items-center gap-2">
                           <div className="flex flex-1 items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-accent border border-border/40 min-w-0">
                             <Avatar className="h-5 w-5 flex-shrink-0">
+                              <AvatarImage src={p.profileImageUrl ?? undefined} alt={p.name} />
                               <AvatarFallback className="text-[10px] bg-muted-foreground/30 text-muted-foreground">
                                 {p.name?.[0] ?? '?'}
                               </AvatarFallback>

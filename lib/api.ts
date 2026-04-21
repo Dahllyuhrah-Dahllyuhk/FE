@@ -27,16 +27,50 @@ export type AvailabilitySlotUpdatePayload = {
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
+// ── Access Token 메모리 저장소 ────────────────────────────────────────────────
+// httpOnly 쿠키 대신 JS 메모리에 보관 (XSS는 CSP로 방어, CSRF 완전 차단)
+let _accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  _accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return _accessToken;
+}
+
+// ── 인증 코드 → Access Token 교환 ────────────────────────────────────────────
+export async function exchangeAuthCode(code: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/auth/token?code=${code}`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('AUTH_CODE_EXCHANGE_FAILED');
+  const data = await res.json();
+  return data.accessToken as string;
+}
+
 async function apiFetch(input: string, init?: RequestInit) {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> || {}),
+  };
+
+  if (_accessToken) {
+    headers['Authorization'] = `Bearer ${_accessToken}`;
+  }
+
   const res = await fetch(`${API_BASE}${input}`, {
     credentials: 'include',
     ...init,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
+    headers,
   });
+
+  // rotate된 새 access token이 응답 헤더에 있으면 메모리 갱신
+  const newToken = res.headers.get('X-New-Access-Token');
+  if (newToken) {
+    _accessToken = newToken;
+  }
 
   if (res.status === 401) {
     throw new Error('UNAUTHORIZED');
@@ -123,10 +157,13 @@ export async function fetchFriends(): Promise<FriendDto[]> {
 }
 
 export async function addFriendByCode(code: string): Promise<FriendDto> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
+
   const res = await fetch(`${API_BASE}/api/friends/addFriend`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ code }),
   });
 

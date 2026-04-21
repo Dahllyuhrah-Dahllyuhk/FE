@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useEventRefresh } from '@/hooks/useEventRefresh';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, getAccessToken } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
 
 /**
@@ -29,7 +29,14 @@ export function useSseSync(enabled: boolean) {
         esRef.current = null;
       }
 
-      const es = new EventSource(`${API_BASE}/api/sse/events`, {
+      // EventSource는 커스텀 헤더 불가 → access token을 쿼리 파라미터로 전달
+      // refresh token 쿠키로의 rotate를 방지하기 위함
+      const accessToken = getAccessToken();
+      const sseUrl = accessToken
+        ? `${API_BASE}/api/sse/events?token=${encodeURIComponent(accessToken)}`
+        : `${API_BASE}/api/sse/events`;
+
+      const es = new EventSource(sseUrl, {
         withCredentials: true,
       });
       esRef.current = es;
@@ -84,6 +91,9 @@ export function useSseSync(enabled: boolean) {
         es.close();
         esRef.current = null;
 
+        // enabled가 false로 바뀐 경우(로그아웃 등)엔 재연결하지 않음
+        if (!enabled) return;
+
         const delay = Math.min(
           1000 * Math.pow(2, retryCountRef.current),
           MAX_RETRY_DELAY_MS
@@ -91,7 +101,7 @@ export function useSseSync(enabled: boolean) {
         retryCountRef.current += 1;
 
         retryTimeoutRef.current = setTimeout(() => {
-          connect();
+          if (enabled) connect();
         }, delay);
       };
     }
