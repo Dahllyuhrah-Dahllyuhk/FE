@@ -15,6 +15,7 @@ import {
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,
+  prepareGoogleLink,
   API_BASE,
 } from '@/lib/api';
 import { RefreshCw } from 'lucide-react';
@@ -313,7 +314,7 @@ export default function HomePage() {
     }
   };
 
-  const syncNow = () => {
+  const syncNow = async () => {
     const ua = navigator.userAgent;
     const isInApp = /NAVER|KAKAOTALK|Instagram|FB_IAB|FBAN|FBAV|Line\//i.test(ua);
 
@@ -342,6 +343,9 @@ export default function HomePage() {
     }
 
     const base = API_BASE || 'http://localhost:8080';
+    // OAuth 리다이렉트 후 SecurityContext가 Google 사용자로 교체되므로
+    // 세션에 userId를 미리 저장해 두어야 handleGoogleLogin이 userId를 식별할 수 있음
+    await prepareGoogleLink();
     window.location.href = `${base}/oauth2/authorization/google`;
   };
 
