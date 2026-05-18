@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { RefreshCw, X, Calendar } from 'lucide-react';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, prepareGoogleLink } from '@/lib/api';
 
 const STORAGE_KEY = 'onboarding_dismissed';
 
@@ -19,9 +19,12 @@ export function OnboardingBanner() {
     setVisible(false);
   };
 
-  const handleSync = () => {
+  const handleSync = async () => {
     dismiss();
     const base = API_BASE || 'http://localhost:8080';
+    // OAuth 리다이렉트 후 SecurityContext가 Google 사용자로 교체되므로
+    // 세션에 userId를 미리 저장해 두어야 handleGoogleLogin이 userId를 식별할 수 있음
+    await prepareGoogleLink();
     window.location.href = `${base}/oauth2/authorization/google`;
   };
 

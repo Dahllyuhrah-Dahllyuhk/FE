@@ -57,6 +57,25 @@ async function apiFetch(input: string, init?: RequestInit) {
   return res;
 }
 
+/* ===================== Auth helpers ===================== */
+
+/**
+ * 구글 캘린더 연동 전 호출.
+ * OAuth 리다이렉트 이후 SecurityContext가 Google OAuth2 사용자로 교체되므로
+ * 세션에 현재 userId를 미리 저장해 두어야 handleGoogleLogin이 userId를 식별할 수 있다.
+ */
+export async function prepareGoogleLink(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/prepare-google-link`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /* ===================== Calendar APIs ===================== */
 
 export async function fetchAllCalendarEvents(): Promise<RawCalendarEvent[]> {
