@@ -55,7 +55,7 @@ export function TimeWheelPicker({
     if (!ref.current) return;
     e.preventDefault();
 
-    const itemHeight = 48;
+    const itemHeight = 36;
     const direction = e.deltaY > 0 ? 1 : -1;
     const currentScroll = ref.current.scrollTop;
     const targetScroll =
@@ -96,13 +96,7 @@ export function TimeWheelPicker({
     ) {
       const selectedIndex = hourOptions.indexOf(hours);
       if (selectedIndex !== -1) {
-        const itemHeight = 48;
-        const currentScrollIndex = Math.round(
-          hourRef.current.scrollTop / itemHeight
-        );
-
-        // Only scroll if the difference is significant (more than a pixel)
-        // This prevents fighting with the snap position
+        const itemHeight = 36;
         if (
           Math.abs(hourRef.current.scrollTop - selectedIndex * itemHeight) > 1
         ) {
@@ -123,8 +117,7 @@ export function TimeWheelPicker({
     ) {
       const selectedIndex = minuteOptions.indexOf(minutes);
       if (selectedIndex !== -1) {
-        const itemHeight = 48;
-        // Only scroll if the difference is significant
+        const itemHeight = 36;
         if (
           Math.abs(minuteRef.current.scrollTop - selectedIndex * itemHeight) > 1
         ) {
@@ -138,19 +131,15 @@ export function TimeWheelPicker({
   }, [minutes, minuteOptions]);
 
   const handleScroll = (type: 'hour' | 'minute', element: HTMLDivElement) => {
-    // Set scrolling flag
     isScrollingRef.current = true;
 
-    // Clear existing timeout
     if (scrollTimeoutRef.current) {
       clearTimeout(scrollTimeoutRef.current);
     }
 
-    // Reset scrolling flag after scroll stops
     scrollTimeoutRef.current = setTimeout(() => {
       isScrollingRef.current = false;
-      // Ensure final snap alignment when scroll stops completely
-      const itemHeight = 48;
+      const itemHeight = 36;
       const scrollTop = element.scrollTop;
       const finalIndex = Math.round(scrollTop / itemHeight);
       const targetScroll = finalIndex * itemHeight;
@@ -160,7 +149,7 @@ export function TimeWheelPicker({
       }
     }, 150);
 
-    const itemHeight = 48;
+    const itemHeight = 36;
     const scrollTop = element.scrollTop;
     const centerIndex = Math.round(scrollTop / itemHeight);
 
@@ -229,15 +218,15 @@ export function TimeWheelPicker({
   return (
     <div className="flex items-center justify-center gap-4">
       {/* Hour Wheel */}
-      <div className="relative h-[192px] w-24 overflow-hidden rounded-lg">
+      <div className="relative h-[108px] w-24 overflow-hidden rounded-lg">
         <div className="absolute inset-0 pointer-events-none z-10">
-          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-background via-background/80 to-transparent" />
-          <div className="absolute top-[72px] left-0 right-0 h-12 bg-muted/10 rounded-md" />
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background via-background/80 to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-9 bg-gradient-to-b from-background via-background/80 to-transparent" />
+          <div className="absolute top-[36px] left-0 right-0 h-9 bg-muted/10 rounded-md" />
+          <div className="absolute bottom-0 left-0 right-0 h-9 bg-gradient-to-t from-background via-background/80 to-transparent" />
         </div>
         <div
           ref={hourRef}
-          className="h-full overflow-y-scroll scrollbar-hide snap-y snap-mandatory py-[72px] cursor-grab active:cursor-grabbing select-none"
+          className="h-full overflow-y-scroll scrollbar-hide snap-y snap-mandatory py-[36px] cursor-grab active:cursor-grabbing select-none"
           onScroll={(e) => handleScroll('hour', e.currentTarget)}
           onMouseDown={(e) => handleMouseDown(e, hourRef)}
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
@@ -246,7 +235,7 @@ export function TimeWheelPicker({
             <div
               key={hour}
               className={cn(
-                'h-12 flex items-center justify-center text-2xl font-semibold snap-center transition-all duration-200 cursor-pointer',
+                'h-9 flex items-center justify-center text-xl font-semibold snap-center transition-all duration-200 cursor-pointer',
                 hour === hours
                   ? 'text-foreground scale-100 opacity-100'
                   : 'text-muted-foreground/40 scale-75 opacity-60'
@@ -269,18 +258,18 @@ export function TimeWheelPicker({
         </div>
       </div>
 
-      <div className="text-3xl font-bold text-muted-foreground/60">:</div>
+      <div className="text-2xl font-bold text-muted-foreground/60">:</div>
 
       {/* Minute Wheel */}
-      <div className="relative h-[192px] w-24 overflow-hidden rounded-lg">
+      <div className="relative h-[108px] w-24 overflow-hidden rounded-lg">
         <div className="absolute inset-0 pointer-events-none z-10">
-          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-background via-background/80 to-transparent" />
-          <div className="absolute top-[72px] left-0 right-0 h-12 bg-muted/10 rounded-md" />
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-background via-background/80 to-transparent" />
+          <div className="absolute top-0 left-0 right-0 h-9 bg-gradient-to-b from-background via-background/80 to-transparent" />
+          <div className="absolute top-[36px] left-0 right-0 h-9 bg-muted/10 rounded-md" />
+          <div className="absolute bottom-0 left-0 right-0 h-9 bg-gradient-to-t from-background via-background/80 to-transparent" />
         </div>
         <div
           ref={minuteRef}
-          className="h-full overflow-y-scroll scrollbar-hide snap-y snap-mandatory py-[72px] cursor-grab active:cursor-grabbing select-none"
+          className="h-full overflow-y-scroll scrollbar-hide snap-y snap-mandatory py-[36px] cursor-grab active:cursor-grabbing select-none"
           onScroll={(e) => handleScroll('minute', e.currentTarget)}
           onMouseDown={(e) => handleMouseDown(e, minuteRef)}
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
@@ -289,7 +278,7 @@ export function TimeWheelPicker({
             <div
               key={minute}
               className={cn(
-                'h-12 flex items-center justify-center text-2xl font-semibold snap-center transition-all duration-200 cursor-pointer',
+                'h-9 flex items-center justify-center text-xl font-semibold snap-center transition-all duration-200 cursor-pointer',
                 minute === minutes
                   ? 'text-foreground scale-100 opacity-100'
                   : 'text-muted-foreground/40 scale-75 opacity-60'

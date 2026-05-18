@@ -17,11 +17,13 @@ import {
   deleteCalendarEvent,
   API_BASE,
 } from '@/lib/api';
+import { RefreshCw } from 'lucide-react';
 import { mapRawToCalendarEvent } from '@/lib/calendar-utils';
 import type { RawCalendarEvent, Event } from '@/types/calendar';
 import { useEventRefresh } from '@/hooks/useEventRefresh';
 import { fetchEvents } from '@/app/api/calendar/calendar';
-
+import { useToast } from '@/hooks/use-toast';
+import { OnboardingBanner } from '@/components/onboarding-banner';
 export default function HomePage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,11 +39,12 @@ export default function HomePage() {
   const [colorMap, setColorMap] = useState<Map<string, string>>(new Map());
 
   const isMobile = useIsMobile();
-
-  const { trigger } = useEventRefresh();
+  const { trigger, refresh } = useEventRefresh();
+  const { toast } = useToast();
 
   const initialLoadDoneRef = useRef(false);
   const loadedMonthsRef = useRef<Set<string>>(new Set());
+  const monthChangeTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const mapRaw = (list: RawCalendarEvent[]): Event[] =>
     list
@@ -93,75 +96,115 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
+  // SSE 부분 패치 — events-changed 이벤트만 여기서 처리 (전체 새로고침은 useSseSync가 담당)
   useEffect(() => {
     const sseUrl = `${API_BASE}/api/sse/events`;
-    const es = new EventSource(sseUrl);
+    let es: EventSource;
+    let retryTimeout: ReturnType<typeof setTimeout>;
 
-    es.onerror = () => {
-      console.warn('[v0] SSE 연결 끊김 - 캘린더 갱신 필요');
-      es.close();
+    const connect = () => {
+      es = new EventSource(sseUrl, { withCredentials: true });
+
+      es.addEventListener('events-changed', (e: MessageEvent) => {
+        try {
+          const { changed, deletedIds } = JSON.parse(e.data) as {
+            changed: RawCalendarEvent[];
+            deletedIds: string[];
+          };
+          setEvents((prev) => {
+            let next = [...prev];
+            if (deletedIds?.length) {
+              next = next.filter((ev) => !deletedIds.includes(ev.id));
+            }
+            if (changed?.length) {
+              for (const raw of changed) {
+                const mapped = mapRawToCalendarEvent(raw, 0);
+                const idx = next.findIndex((ev) => ev.id === mapped.id);
+                if (idx >= 0) next[idx] = mapped;
+                else next.push(mapped);
+              }
+              next.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+            }
+            return next;
+          });
+        } catch {
+          refresh();
+        }
+      });
+
+      es.onerror = () => {
+        es.close();
+        retryTimeout = setTimeout(connect, 5000);
+      };
     };
+
+    connect();
 
     return () => {
-      es.close();
+      clearTimeout(retryTimeout);
+      es?.close();
     };
-  }, []);
+  }, [refresh]);
 
   const handleMonthChange = useCallback(
     async (months: Date[]) => {
       if (!initialLoadDoneRef.current) return;
 
-      const newMonths = months.filter((m) => {
-        const key = `${m.getFullYear()}-${m.getMonth()}`;
-        return !loadedMonthsRef.current.has(key);
-      });
-
-      if (newMonths.length === 0) return;
-
-      const sortedMonths = [...newMonths].sort(
-        (a, b) => a.getTime() - b.getTime()
-      );
-      const startMonth = sortedMonths[0];
-      const endMonth = sortedMonths[sortedMonths.length - 1];
-
-      const startDate = new Date(
-        startMonth.getFullYear(),
-        startMonth.getMonth(),
-        1
-      );
-      const endDate = new Date(
-        endMonth.getFullYear(),
-        endMonth.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999
-      );
-
-      try {
-        const raw = await fetchEvents({
-          start: startDate.toISOString(),
-          end: endDate.toISOString(),
+      // 빠른 스크롤 시 버벅임 방지 — 300ms 디바운스
+      clearTimeout(monthChangeTimerRef.current);
+      monthChangeTimerRef.current = setTimeout(async () => {
+        const newMonths = months.filter((m) => {
+          const key = `${m.getFullYear()}-${m.getMonth()}`;
+          return !loadedMonthsRef.current.has(key);
         });
 
-        newMonths.forEach((m) => {
-          loadedMonthsRef.current.add(`${m.getFullYear()}-${m.getMonth()}`);
-        });
+        if (newMonths.length === 0) return;
 
-        if (raw.length > 0) {
-          setEvents((prev) => {
-            const existingIds = new Set(prev.map((e) => e.id));
-            const newEvents = mapRaw(raw).filter((e) => !existingIds.has(e.id));
-            if (newEvents.length === 0) return prev;
-            return [...prev, ...newEvents].sort(
-              (a, b) => a.startDate.getTime() - b.startDate.getTime()
-            );
+        const sortedMonths = [...newMonths].sort(
+          (a, b) => a.getTime() - b.getTime()
+        );
+        const startMonth = sortedMonths[0];
+        const endMonth = sortedMonths[sortedMonths.length - 1];
+
+        const startDate = new Date(
+          startMonth.getFullYear(),
+          startMonth.getMonth(),
+          1
+        );
+        const endDate = new Date(
+          endMonth.getFullYear(),
+          endMonth.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        );
+
+        try {
+          const raw = await fetchEvents({
+            start: startDate.toISOString(),
+            end: endDate.toISOString(),
           });
+
+          newMonths.forEach((m) => {
+            loadedMonthsRef.current.add(`${m.getFullYear()}-${m.getMonth()}`);
+          });
+
+          if (raw.length > 0) {
+            setEvents((prev) => {
+              const existingIds = new Set(prev.map((e) => e.id));
+              const newEvents = mapRaw(raw).filter((e) => !existingIds.has(e.id));
+              if (newEvents.length === 0) return prev;
+              return [...prev, ...newEvents].sort(
+                (a, b) => a.startDate.getTime() - b.startDate.getTime()
+              );
+            });
+          }
+        } catch (err) {
+          console.warn('추가 이벤트 로드 실패:', err);
         }
-      } catch (err) {
-        console.warn('[v0] 추가 이벤트 로드 실패:', err);
-      }
+      }, 300);
     },
     [colorMap]
   );
@@ -194,11 +237,6 @@ export default function HomePage() {
     setSelectedEvent(null);
     setIsEditMode(true);
     setIsDialogOpen(true);
-  };
-
-  const syncNow = () => {
-    const base = API_BASE || 'http://localhost:8080';
-    window.location.href = `${base}/oauth2/authorization/google`;
   };
 
   const handleSaveEvent = async (event: Event) => {
@@ -267,13 +305,44 @@ export default function HomePage() {
         );
       }
     } catch (err: any) {
-      console.error('[v0] 이벤트 저장 실패:', err);
-      setError(err?.message ?? '일정 저장 중 오류가 발생했습니다');
-      setEvents(previousEvents);
+      console.error('이벤트 저장 실패:', err);
+      setError(err?.message ?? '일정 저장 중 오류가 발생했습니다');      setEvents(previousEvents);
     } finally {
       setSelectedEvent(null);
       setSelectedDateRange(null);
     }
+  };
+
+  const syncNow = () => {
+    const ua = navigator.userAgent;
+    const isInApp = /NAVER|KAKAOTALK|Instagram|FB_IAB|FBAN|FBAV|Line\//i.test(ua);
+
+    if (isInApp) {
+      if (/Android/.test(ua)) {
+        const url = window.location.href;
+        window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+        return;
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href).then(() => {
+          toast({
+            title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
+            description: 'Safari 주소창에 방금 복사된 주소를 붙여넣기 해주세요.',
+            variant: 'destructive',
+          });
+        });
+      } else {
+        toast({
+          title: '인앱 브라우저에서는 구글 연동이 제한됩니다',
+          description: 'Safari나 Chrome 등 외부 브라우저에서 접속 후 동기화해주세요.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+
+    const base = API_BASE || 'http://localhost:8080';
+    window.location.href = `${base}/oauth2/authorization/google`;
   };
 
   const handleDeleteEvent = async (eventId: string) => {
@@ -296,31 +365,26 @@ export default function HomePage() {
         return next;
       });
     } catch (err: any) {
-      console.error('[v0] 이벤트 삭제 실패:', err);
-      setError(err?.message ?? '삭제 중 오류가 발생했습니다');
-      setEvents(previousEvents);
+      console.error('이벤트 삭제 실패:', err);
+      setError(err?.message ?? '삭제 중 오류가 발생했습니다');      setEvents(previousEvents);
     }
   };
 
   return (
     <ProtectedRoute>
       <div className="flex min-h-screen flex-col bg-background">
-        <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
-          <div className="flex items-center justify-between px-4 py-2">
-            <div className="flex flex-col">
-              <span className="text-xs text-muted-foreground">
-                맞춰봄 캘린더
-              </span>
-              <h1 className="text-lg font-semibold md:text-xl">
-                {isMobile ? '내 일정' : '내 캘린더'}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
+        <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
+          <div className="flex items-center justify-between px-4 h-12">
+            <h1 className="text-sm font-semibold text-foreground tracking-tight">
+              맞춰봄
+            </h1>
+            <div className="flex items-center gap-1">
               <button
                 onClick={syncNow}
-                className="rounded-md border px-3 py-1 text-sm hover:bg-accent"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md hover:bg-accent transition-colors"
                 title="구글 캘린더에서 최신 일정 동기화"
               >
+                <RefreshCw className="h-3.5 w-3.5" />
                 동기화
               </button>
               <ThemeToggle />
@@ -329,7 +393,8 @@ export default function HomePage() {
         </header>
 
         <main className="flex-1 overflow-y-auto">
-          <div className="p-4">
+          <OnboardingBanner />
+          <div className="px-2 pt-0 pb-4">
             {error && (
               <Alert variant="destructive" className="mb-3 whitespace-pre-line">
                 <AlertDescription>{error}</AlertDescription>

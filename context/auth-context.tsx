@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { API_BASE } from '@/lib/api';
+import { useSseSync } from '@/hooks/useSseSync';
 
 type User = {
   id: string;
@@ -23,6 +24,7 @@ type AuthContextType = {
   isLoading: boolean;
   refreshUser: () => Promise<void>;
   logout: () => void;
+  withdraw: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,7 +55,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         createdAt: data.createdAt
       });
     } catch (e) {
-      console.error('auth /api/auth/me error', e);
+      // 인증 실패 — 조용히 처리 (미로그인 상태는 정상)
       setUser(null);
     }
   }, []);
@@ -70,6 +72,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
     })();
   }, [fetchMe]);
+
+  // 로그인 완료 후 sessionStorage에 저장된 redirect 경로로 이동
+  useEffect(() => {
+    if (isLoading || !user) return;
+    if (typeof window === 'undefined') return;
+
+    const redirectTo = sessionStorage.getItem('login_redirect');
+    if (redirectTo) {
+      sessionStorage.removeItem('login_redirect');
+      // 현재 이미 해당 경로에 있지 않을 때만 이동
+      if (pathname !== redirectTo && pathname === '/') {
+        router.replace(redirectTo);
+      }
+    }
+  }, [isLoading, user]); // eslint-disable-line
 
   // ✅ 수정된 로그아웃 함수
   const logout = useCallback(async () => {
@@ -89,14 +106,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  // 로그인 필요 페이지 보호 ("/login"은 예외)
-  useEffect(() => {
-    if (isLoading) return;
+  // 로그인 필요 페이지 보호는 ProtectedRoute 컴포넌트에서 처리
 
-    if (!user && pathname !== '/login') {
-      router.replace('/login');
+  // 로그인 상태일 때만 SSE 연결
+  useSseSync(!isLoading && !!user);
+
+  const withdraw = useCallback(async () => {    try {
+      const res = await fetch(`${API_BASE}/api/auth/me`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) throw new Error('탈퇴 요청 실패');
+    } catch (e) {
+      console.error('Withdraw failed', e);
+      throw e;
+    } finally {
+      setUser(null);
+      window.location.href = '/login';
     }
-  }, [isLoading, user, pathname, router]);
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -105,6 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLoading,
         refreshUser,
         logout,
+        withdraw,
       }}
     >
       {children}

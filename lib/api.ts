@@ -1,4 +1,3 @@
-// FE/lib/api.ts
 import type { RawCalendarEvent } from '@/types/calendar';
 import type {
   Meeting,
@@ -44,9 +43,15 @@ async function apiFetch(input: string, init?: RequestInit) {
   }
 
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error('API error', res.status, text);
-    throw new Error(`API_ERROR_${res.status}`);
+    let errorMessage = `API_ERROR_${res.status}`;
+    try {
+      const data = await res.json();
+      errorMessage = data?.message || data?.error || errorMessage;
+    } catch {
+      const text = await res.text().catch(() => '');
+      if (text) errorMessage = text;
+    }
+    throw new Error(errorMessage);
   }
 
   return res;
@@ -133,7 +138,6 @@ export async function addFriendByCode(code: string): Promise<FriendDto> {
   if (res.status === 409) throw new Error('이미 친구입니다.');
   throw new Error(msg || '알 수 없는 오류');
 }
-
 export async function deleteFriend(friendId: string): Promise<void> {
   await apiFetch(`/api/friends/${friendId}`, { method: 'DELETE' });
 }
@@ -261,6 +265,28 @@ export async function updateMeetingState(
   const res = await apiFetch(`/api/meetings/${id}/state`, {
     method: 'PATCH',
     body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function getMeetingInviteCode(meetingId: string): Promise<string> {
+  const res = await apiFetch(`/api/meetings/${meetingId}/invite-code`);
+  const data = await res.json();
+  return data.inviteCode as string;
+}
+
+export async function joinMeetingByCode(inviteCode: string): Promise<Meeting> {
+  const res = await apiFetch('/api/meetings/join', {
+    method: 'POST',
+    body: JSON.stringify({ inviteCode }),
+  });
+  return res.json();
+}
+
+export async function addFriendByUserId(targetUserId: string): Promise<FriendDto> {
+  const res = await apiFetch('/api/friends/add-by-user', {
+    method: 'POST',
+    body: JSON.stringify({ userId: targetUserId }),
   });
   return res.json();
 }

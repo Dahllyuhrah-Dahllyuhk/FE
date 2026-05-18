@@ -6,11 +6,23 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Clock, Calendar, AlignLeft, Pencil } from 'lucide-react';
 import type { Event } from '@/types/calendar';
+
+const COLOR_HEX: Record<string, string> = {
+  'bg-blue-500': '#3b82f6',
+  'bg-purple-500': '#a855f7',
+  'bg-green-500': '#22c55e',
+  'bg-red-500': '#ef4444',
+  'bg-orange-500': '#f97316',
+  'bg-yellow-500': '#eab308',
+  'bg-pink-500': '#ec4899',
+  'bg-teal-500': '#14b8a6',
+  'bg-indigo-500': '#6366f1',
+  'bg-cyan-500': '#06b6d4',
+};
+const getHex = (cls: string) => COLOR_HEX[cls] ?? '#6b7280';
 
 type EventDetailModalProps = {
   open: boolean;
@@ -36,118 +48,95 @@ export function EventDetailModal({
     }
   };
 
-  const formatDateTime = (date: Date) =>
-    new Intl.DateTimeFormat('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date);
+  const fmtDate = (d: Date) =>
+    new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(d);
 
-  const formatRange = (start: Date, end: Date) => {
-    // 같은 날이면 시간만 다르게, 아니면 전체 표시
-    const sameDay =
-      start.getFullYear() === end.getFullYear() &&
-      start.getMonth() === end.getMonth() &&
-      start.getDate() === end.getDate();
-    if (sameDay) {
-      const d = new Intl.DateTimeFormat('ko-KR', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }).format(start);
-      const hm = new Intl.DateTimeFormat('ko-KR', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      return `${d} ${hm.format(start)} ~ ${hm.format(end)}`;
-    }
-    return `${formatDateTime(start)} ~ ${formatDateTime(end)}`;
-  };
+  const fmtTime = (d: Date) =>
+    new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(d);
 
-  const durationLabel = (() => {
-    const diff = Math.max(
-      0,
-      event.endDate.getTime() - event.startDate.getTime()
-    );
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}시간 ${minutes}분`;
-  })();
+  const hex = getHex(event.color);
+
+  const isSameDay =
+    new Date(event.startDate).toDateString() === new Date(event.endDate).toDateString();
+
+  const dateLabel = event.allDay
+    ? isSameDay
+      ? fmtDate(new Date(event.startDate))
+      : `${fmtDate(new Date(event.startDate))} ~ ${fmtDate(new Date(event.endDate))}`
+    : isSameDay
+    ? fmtDate(new Date(event.startDate))
+    : `${fmtDate(new Date(event.startDate))} ~ ${fmtDate(new Date(event.endDate))}`;
+
+  const timeLabel = !event.allDay
+    ? `${fmtTime(new Date(event.startDate))} – ${fmtTime(new Date(event.endDate))}`
+    : '종일';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <span
-              className={`h-4 w-4 rounded-full ${event.color}`}
-              aria-hidden="true"
-            />
-            {event.title}
-          </DialogTitle>
+      <DialogContent className="sm:max-w-[380px] p-0 overflow-hidden rounded-2xl gap-0">
+        <DialogDescription className="sr-only">일정 상세 정보</DialogDescription>
 
-          {/* ✅ 접근성 설명 추가: 경고 해소 */}
-          <DialogDescription className="sr-only" id="event-detail-desc">
-            일정 상세 정보: {event.title}. 시작{' '}
-            {formatDateTime(event.startDate)}, 종료{' '}
-            {formatDateTime(event.endDate)}.
-          </DialogDescription>
-        </DialogHeader>
+        {/* 컬러 헤더 */}
+        <div className="h-1.5 w-full" style={{ backgroundColor: hex }} />
 
-        <div className="grid gap-4 py-4" aria-describedby="event-detail-desc">
-          <div className="grid gap-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              설명
-            </h3>
-            <p className="text-sm text-foreground">
-              {event.description || '설명 없음'}
-            </p>
-          </div>
-
-          <div className="grid gap-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              기간
-            </h3>
-            <p className="text-sm text-foreground">
-              {formatRange(event.startDate, event.endDate)}
-            </p>
-          </div>
-
-          <div className="grid gap-2">
-            <h3 className="text-sm font-semibold text-muted-foreground">
-              진행 시간
-            </h3>
-            <p className="text-sm text-foreground">{durationLabel}</p>
-          </div>
+        <div className="px-5 pt-4 pb-2">
+          <DialogHeader>
+            <div className="flex items-start gap-2.5">
+              <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: hex }} />
+              <DialogTitle className="text-base font-semibold text-foreground leading-snug flex-1">
+                {event.title}
+              </DialogTitle>
+            </div>
+          </DialogHeader>
         </div>
 
-        <DialogFooter className="flex-col gap-2 sm:flex-row">
-          <Button
-            variant="destructive"
-            size="sm"
+        <div className="px-5 pb-4 space-y-2.5">
+          {/* 날짜 */}
+          <div className="flex items-start gap-3">
+            <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <span className="text-sm text-foreground/80">{dateLabel}</span>
+          </div>
+
+          {/* 시간 */}
+          <div className="flex items-start gap-3">
+            <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <span className="text-sm text-foreground/80">{timeLabel}</span>
+          </div>
+
+          {/* 설명 */}
+          {event.description && (
+            <div className="flex items-start gap-3">
+              <AlignLeft className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-foreground/70 leading-relaxed">{event.description}</p>
+            </div>
+          )}
+        </div>
+
+        {/* 액션 바 */}
+        <div className="flex items-center gap-1 px-5 py-3 border-t border-border/40">
+          <button
             onClick={handleDelete}
-            className="sm:mr-auto"
-            aria-label="일정 삭제"
+            className="flex items-center gap-1.5 text-xs text-destructive hover:bg-destructive/8 px-3 py-2 rounded-lg transition-colors"
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
             삭제
-          </Button>
-
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            닫기
-          </Button>
-
-          <Button
-            onClick={() => {
-              onEdit(event);
-              onOpenChange(false);
-            }}
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => onOpenChange(false)}
+            className="text-xs text-muted-foreground hover:text-foreground px-3 py-2 rounded-lg hover:bg-accent transition-colors"
           >
+            닫기
+          </button>
+          <button
+            onClick={() => { onEdit(event); onOpenChange(false); }}
+            className="flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-lg text-white transition-colors hover:opacity-90"
+            style={{ backgroundColor: hex }}
+          >
+            <Pencil className="h-3 w-3" />
             편집
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );

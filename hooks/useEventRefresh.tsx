@@ -1,4 +1,3 @@
-// FE/hooks/useEventRefresh.ts
 'use client';
 
 import {

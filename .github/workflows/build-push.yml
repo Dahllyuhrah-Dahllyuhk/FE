@@ -1,20 +1,21 @@
-name: Build & Push FE Image
+name: FE CI/CD
 
 on:
   push:
-    branches: ['main']
+    branches: [main, develop]
   workflow_dispatch: {}
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-  ECR_REPO: ${{ secrets.ECR_FE_REPO }}
+  AWS_REGION:   ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+  ECR_REPO:     ${{ secrets.ECR_FE_REPO }}
 
 jobs:
-  build-and-push-fe:
+  build-push-deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
@@ -23,28 +24,97 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region:            ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set image name
-        id: vars
+      - name: Resolve environment
+        id: env
         run: |
-          echo "IMAGE_NAME=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO }}" >> $GITHUB_ENV
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "api_base=https://matuabom.store" >> $GITHUB_OUTPUT
+            echo "is_prod=true" >> $GITHUB_OUTPUT
+          else
+            echo "api_base=https://dev.matuabom.store" >> $GITHUB_OUTPUT
+            echo "is_prod=false" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Build FE image
+      - name: Build and push image
         run: |
+          IMAGE=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}
+          SHA=${{ github.sha }}
+
           docker build \
-            -t $IMAGE_NAME:latest \
-            -t $IMAGE_NAME:${{ github.sha }} \
-            --build-arg NEXT_PUBLIC_API_BASE=https://matuabom.store \
+            --build-arg NEXT_PUBLIC_API_BASE=${{ steps.env.outputs.api_base }} \
+            --no-cache \
+            -t $IMAGE:$SHA \
+            -t $IMAGE:latest \
             .
 
-      - name: Push FE image
+          docker push $IMAGE:$SHA
+          docker push $IMAGE:latest
+
+      - name: Prune old ECR images (keep latest 3)
         run: |
-          docker push $IMAGE_NAME:latest
-          docker push $IMAGE_NAME:${{ github.sha }}
+          IMAGE_DETAILS=$(aws ecr describe-images \
+            --repository-name ${{ env.ECR_REPO }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'sort_by(imageDetails, &imagePushedAt)' \
+            --output json)
+
+          TOTAL=$(echo $IMAGE_DETAILS | jq length)
+          DELETE_COUNT=$((TOTAL - 3))
+
+          if [ $DELETE_COUNT -le 0 ]; then
+            echo "이미지 3개 이하, 삭제 건너뜀"
+            exit 0
+          fi
+
+          DIGESTS=$(echo $IMAGE_DETAILS | jq -r ".[0:$DELETE_COUNT] | .[].imageDigest")
+          for DIGEST in $DIGESTS; do
+            aws ecr batch-delete-image \
+              --repository-name ${{ env.ECR_REPO }} \
+              --region ${{ env.AWS_REGION }} \
+              --image-ids imageDigest=$DIGEST
+          done
+
+      - name: Deploy to EC2
+        if: github.ref_name == 'main'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_KEY }}
+          script: |
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+              | docker login --username AWS --password-stdin \
+                ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+            cd /home/ubuntu/Deploy
+            docker compose pull fe
+            docker compose up -d --no-deps --force-recreate fe
+
+            echo "FE 헬스체크 시작..."
+            for i in $(seq 1 12); do
+              RUNNING=$(docker inspect --format='{{.State.Running}}' fe 2>/dev/null || echo "false")
+              RESTARTING=$(docker inspect --format='{{.State.Restarting}}' fe 2>/dev/null || echo "true")
+
+              if [ "$RUNNING" = "true" ] && [ "$RESTARTING" = "false" ]; then
+                echo "FE 배포 성공 (attempt $i)"
+                break
+              fi
+
+              if [ $i -eq 12 ]; then
+                echo "FE 헬스체크 실패"
+                docker compose -f /home/ubuntu/Deploy/docker-compose.yml logs --tail=30 fe
+                exit 1
+              fi
+
+              echo "대기 중... ($i/12)"
+              sleep 5
+            done
+
+            docker image prune -f

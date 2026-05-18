@@ -2,26 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { CalendarIcon, X } from 'lucide-react';
+import { CalendarIcon, X, Clock, ChevronLeft } from 'lucide-react';
 
 import { ProtectedRoute } from '@/components/protected-route';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { LegacyTimeRangeSelector } from '@/components/time-range-selector';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
+import { Label } from '@/components/ui/label';
+import { TimeRangeSelector } from '@/components/time-range-selector';
 import {
   Popover,
   PopoverContent,
@@ -34,404 +23,262 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from '@/hooks/use-toast';
 import { createMeeting, fetchFriends, type FriendDto } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import type { DateRange } from 'react-day-picker';
 
-const formSchema = z.object({
-  name: z.string().min(1, '모임 이름을 입력해주세요.'),
-  dateRange: z.object({
-    from: z.date({ required_error: '시작 날짜를 선택해주세요.' }),
-    to: z.date({ required_error: '종료 날짜를 선택해주세요.' }),
-  }),
-  isAllDay: z.boolean().default(false),
-  timeConstraints: z
-    .array(
-      z.object({
-        startTime: z
-          .string()
-          .regex(
-            /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
-            '올바른 시간 형식이 아닙니다 (HH:mm)'
-          ),
-        endTime: z
-          .string()
-          .regex(
-            /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/,
-            '올바른 시간 형식이 아닙니다 (HH:mm)'
-          ),
-      })
-    )
-    .default([{ startTime: '09:00', endTime: '18:00' }]),
-  invitedUserIds: z
-    .array(z.string())
-    .min(1, '최소 1명의 친구를 초대해야 합니다.'),
-  reflectTimetable: z.boolean().default(true),
-  reflectCalendar: z.boolean().default(true),
-});
+// 슬롯 배열 → API timeConstraints 변환
+function slotsToConstraints(slots: number[]) {
+  if (slots.length === 0) return [];
+  const sorted = [...slots].sort((a, b) => a - b);
+  const ranges: { startTime: string; endTime: string }[] = [];
+  let start = sorted[0];
+  let end = sorted[0];
+  for (let i = 1; i <= sorted.length; i++) {
+    if (i < sorted.length && sorted[i] === end + 1) {
+      end = sorted[i];
+    } else {
+      ranges.push({
+        startTime: `${start.toString().padStart(2, '0')}:00:00`,
+        endTime: `${(end + 1).toString().padStart(2, '0')}:00:00`,
+      });
+      if (i < sorted.length) { start = sorted[i]; end = sorted[i]; }
+    }
+  }
+  return ranges;
+}
+
+function formatRangeLabel(slots: number[]) {
+  if (slots.length === 0) return '선택 없음';
+  const sorted = [...slots].sort((a, b) => a - b);
+  const ranges: string[] = [];
+  let start = sorted[0]; let end = sorted[0];
+  for (let i = 1; i <= sorted.length; i++) {
+    if (i < sorted.length && sorted[i] === end + 1) {
+      end = sorted[i];
+    } else {
+      ranges.push(`${start}:00~${end + 1}:00`);
+      if (i < sorted.length) { start = sorted[i]; end = sorted[i]; }
+    }
+  }
+  return ranges.join(', ');
+}
 
 export default function CreateMeetingPage() {
   const router = useRouter();
+
+  const [name, setName] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [isAllDay, setIsAllDay] = useState(false);
+  const [selectedSlots, setSelectedSlots] = useState<number[]>([9, 10, 11, 12, 13, 14, 15, 16, 17]);
   const [friends, setFriends] = useState<FriendDto[]>([]);
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(true);
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      name: '',
-      isAllDay: false,
-      timeConstraints: [{ startTime: '09:00', endTime: '18:00' }],
-      invitedUserIds: [],
-      reflectTimetable: true,
-      reflectCalendar: true,
-    },
-  });
-
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: 'timeConstraints',
-  });
-
-  const isAllDay = form.watch('isAllDay');
-
-  const generateTimeOptions = () => {
-    const options = [];
-    for (let hour = 0; hour < 24; hour++) {
-      const time = `${hour.toString().padStart(2, '0')}:00`;
-      options.push(time);
-    }
-    return options;
-  };
-
-  const timeOptions = generateTimeOptions();
+  const [reflectTimetable, setReflectTimetable] = useState(true);
+  const [reflectCalendar, setReflectCalendar] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
-    const loadFriends = async () => {
-      try {
-        const data = await fetchFriends();
-        setFriends(data);
-      } catch (error) {
-        console.error('Failed to fetch friends', error);
-        toast({
-          title: '친구 목록 로드 실패',
-          description: '친구 목록을 불러오는데 실패했습니다.',
-          variant: 'destructive',
-        });
-      } finally {
-        setIsLoadingFriends(false);
-      }
-    };
-    loadFriends();
+    fetchFriends()
+      .then(setFriends)
+      .catch(() => toast({ title: '친구 목록 로드 실패', variant: 'destructive' }))
+      .finally(() => setIsLoadingFriends(false));
   }, []);
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
-    try {
-      await createMeeting({
-        name: values.name,
-        invitedUserIds: values.invitedUserIds,
-        requirement: {
-          dateRangeStart: format(values.dateRange.from, 'yyyy-MM-dd'),
-          dateRangeEnd: format(values.dateRange.to, 'yyyy-MM-dd'),
-          isAllDay: values.isAllDay,
-          timeConstraints: values.isAllDay ? [] : values.timeConstraints ?? [],
-        },
-        defaultReflectTimetable: values.reflectTimetable, // requirement 밖으로 이동
-        defaultReflectCalendar: values.reflectCalendar, // requirement 밖으로 이동
-      });
+  const handleSubmit = async () => {
+    if (!name.trim()) { toast({ title: '모임 이름을 입력해주세요.', variant: 'destructive' }); return; }
+    if (!dateRange?.from || !dateRange?.to) { toast({ title: '날짜 범위를 선택해주세요.', variant: 'destructive' }); return; }
+    if (!isAllDay && selectedSlots.length === 0) { toast({ title: '가능한 시간대를 1개 이상 선택해주세요.', variant: 'destructive' }); return; }
 
-      toast({
-        title: '모임 생성 완료',
-        description: '새로운 모임이 생성되었습니다.',
+    setIsSubmitting(true);
+    try {
+      const created = await createMeeting({
+        name: name.trim(),
+        invitedUserIds: selectedFriends,
+        requirement: {
+          dateRangeStart: format(dateRange.from, 'yyyy-MM-dd'),
+          dateRangeEnd: format(dateRange.to, 'yyyy-MM-dd'),
+          isAllDay,
+          timeConstraints: isAllDay ? [] : slotsToConstraints(selectedSlots),
+        },
+        defaultReflectTimetable: reflectTimetable,
+        defaultReflectCalendar: reflectCalendar,
       });
-      router.push('/meetings');
-    } catch (error) {
-      console.error('Failed to create meeting', error);
-      toast({
-        title: '모임 생성 실패',
-        description: '모임을 생성하는 중 오류가 발생했습니다.',
-        variant: 'destructive',
-      });
+      toast({ title: '모임 생성 완료' });
+      router.push(`/meetings/${created.id}`);
+    } catch {
+      toast({ title: '모임 생성 실패', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
-  }
+  };
+
+  const toggleFriend = (id: string) => {
+    setSelectedFriends(prev =>
+      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
+    );
+  };
 
   return (
     <ProtectedRoute>
-      <div className="flex min-h-screen flex-col bg-background pb-16">
-        <header className="border-b border-border bg-card px-4 py-4">
+      <div className="flex min-h-screen flex-col bg-background">
+        <header className="border-b border-border bg-card px-4 py-3 sticky top-0 z-20">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
-              <X className="h-5 w-5" />
+              <ChevronLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-lg font-bold text-foreground">
-              새 모임 만들기
-            </h1>
+            <h1 className="text-base font-bold">새 모임 만들기</h1>
           </div>
         </header>
 
-        <main className="flex-1 p-4">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>모임 이름</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="예: 주간 회의, 저녁 식사"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <main className="flex-1 p-4 pb-28 max-w-lg mx-auto w-full space-y-5">
 
-              <FormField
-                control={form.control}
-                name="dateRange"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>날짜 범위</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={'outline'}
-                            className={cn(
-                              'w-full pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
-                            )}
-                          >
-                            {field.value?.from ? (
-                              field.value.to ? (
-                                <>
-                                  {format(field.value.from, 'PPP', {
-                                    locale: ko,
-                                  })}{' '}
-                                  -{' '}
-                                  {format(field.value.to, 'PPP', {
-                                    locale: ko,
-                                  })}
-                                </>
-                              ) : (
-                                format(field.value.from, 'PPP', { locale: ko })
-                              )
-                            ) : (
-                              <span>날짜를 선택하세요</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="range"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) =>
-                            date < new Date(new Date().setHours(0, 0, 0, 0))
-                          }
-                          initialFocus
-                          locale={ko} // Added Korean locale
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormDescription>
-                      모임을 가질 수 있는 후보 날짜 범위를 선택하세요.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          {/* 모임 이름 */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">모임 이름</Label>
+            <Input
+              placeholder="예: 주간 회의, 저녁 식사"
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+          </div>
 
-              <FormField
-                control={form.control}
-                name="isAllDay"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">하루 종일</FormLabel>
-                      <FormDescription>
-                        시간 제약 없이 날짜만 정합니다.
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              {!isAllDay && (
-                <div className="space-y-4">
-                  <FormLabel className="text-base">시간 제약</FormLabel>
-                  <FormDescription>
-                    드래그하여 모임이 가능한 시간대를 설정하세요.
-                  </FormDescription>
-
-                  <div className="space-y-6">
-                    {fields.map((field, index) => (
-                      <div
-                        key={field.id}
-                        className="relative p-4 rounded-lg border border-border bg-card"
-                      >
-                        <div className="max-h-[400px] overflow-y-auto">
-                          <LegacyTimeRangeSelector
-                            startTime={form.watch(
-                              `timeConstraints.${index}.startTime`
-                            )}
-                            endTime={form.watch(
-                              `timeConstraints.${index}.endTime`
-                            )}
-                            onStartTimeChange={(time: string) =>
-                              form.setValue(
-                                `timeConstraints.${index}.startTime`,
-                                time
-                              )
-                            }
-                            onEndTimeChange={(time: string) =>
-                              form.setValue(
-                                `timeConstraints.${index}.endTime`,
-                                time
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <FormField
-                control={form.control}
-                name="invitedUserIds"
-                render={() => (
-                  <FormItem>
-                    <div className="mb-4">
-                      <FormLabel className="text-base">친구 초대</FormLabel>
-                      <FormDescription>
-                        함께할 친구를 선택하세요.
-                      </FormDescription>
-                    </div>
-                    {isLoadingFriends ? (
-                      <div className="text-sm text-muted-foreground">
-                        친구 목록을 불러오는 중...
-                      </div>
-                    ) : friends.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">
-                        초대할 친구가 없습니다.
-                      </div>
-                    ) : (
-                      <ScrollArea className="h-[200px] rounded-md border p-4">
-                        <div className="space-y-4">
-                          {friends.map((friend) => (
-                            <FormField
-                              key={friend.id}
-                              control={form.control}
-                              name="invitedUserIds"
-                              render={({ field }) => {
-                                return (
-                                  <FormItem
-                                    key={friend.id}
-                                    className="flex flex-row items-start space-x-3 space-y-0"
-                                  >
-                                    <FormControl>
-                                      <Checkbox
-                                        checked={field.value?.includes(
-                                          friend.id
-                                        )}
-                                        onCheckedChange={(checked) => {
-                                          return checked
-                                            ? field.onChange([
-                                                ...field.value,
-                                                friend.id,
-                                              ])
-                                            : field.onChange(
-                                                field.value?.filter(
-                                                  (value) => value !== friend.id
-                                                )
-                                              );
-                                        }}
-                                      />
-                                    </FormControl>
-                                    <FormLabel className="font-normal cursor-pointer w-full">
-                                      {friend.nickname}
-                                    </FormLabel>
-                                  </FormItem>
-                                );
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="space-y-4 rounded-lg border p-4">
-                <h3 className="font-medium">일정 반영 설정</h3>
-                <FormField
-                  control={form.control}
-                  name="reflectTimetable"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>내 시간표 반영</FormLabel>
-                        <FormDescription>
-                          내 주간 시간표의 수업 시간을 자동으로 '불가능'으로
-                          설정합니다.
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
+          {/* 날짜 범위 */}
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium">후보 날짜 범위</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn('w-full justify-start text-left font-normal', !dateRange && 'text-muted-foreground')}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateRange?.from ? (
+                    dateRange.to
+                      ? `${format(dateRange.from, 'PPP', { locale: ko })} – ${format(dateRange.to, 'PPP', { locale: ko })}`
+                      : format(dateRange.from, 'PPP', { locale: ko })
+                  ) : '날짜를 선택하세요'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  disabled={date => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                  initialFocus
+                  locale={ko}
                 />
-                <FormField
-                  control={form.control}
-                  name="reflectCalendar"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel>내 캘린더 일정 반영</FormLabel>
-                        <FormDescription>
-                          내 캘린더에 등록된 일정이 있는 시간을 자동으로
-                          '불가능'으로 설정합니다.
-                        </FormDescription>
-                      </div>
-                    </FormItem>
-                  )}
-                />
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* 하루 종일 토글 */}
+          <div className="flex items-center justify-between rounded-xl border border-border/60 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">하루 종일</p>
+              <p className="text-xs text-muted-foreground">시간 제약 없이 날짜만 정합니다</p>
+            </div>
+            <Switch checked={isAllDay} onCheckedChange={setIsAllDay} />
+          </div>
+
+          {/* 시간대 선택 */}
+          {!isAllDay && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">가능한 시간대</Label>
+                <Button variant="ghost" size="sm" className="text-xs h-7 px-2" onClick={() => setShowTimePicker(v => !v)}>
+                  <Clock className="h-3.5 w-3.5 mr-1" />
+                  {showTimePicker ? '접기' : '편집'}
+                </Button>
               </div>
 
-              <Button type="submit" className="w-full" size="lg">
-                모임 만들기
-              </Button>
-            </form>
-          </Form>
+              {/* 선택된 시간 요약 */}
+              <div className="rounded-xl border border-border/60 px-4 py-3 bg-muted/20">
+                <p className="text-xs text-muted-foreground mb-1">선택된 시간대</p>
+                <p className="text-sm font-medium text-foreground">
+                  {formatRangeLabel(selectedSlots)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  총 {selectedSlots.length}시간 선택됨
+                </p>
+              </div>
+
+              {showTimePicker && (
+                <div className="rounded-xl border border-border/60 p-4 bg-card">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    클릭 또는 드래그로 가능한 시간대를 선택하세요. 여러 구간을 자유롭게 선택할 수 있어요.
+                  </p>
+                  <TimeRangeSelector
+                    selectedSlots={selectedSlots}
+                    onSlotsChange={setSelectedSlots}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 친구 초대 (선택) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">친구 초대 (선택)</Label>
+              <span className="text-xs text-muted-foreground">모임 코드로도 초대 가능</span>
+            </div>
+            {isLoadingFriends ? (
+              <p className="text-sm text-muted-foreground">로딩 중...</p>
+            ) : friends.length === 0 ? (
+              <div className="rounded-xl border border-border/60 px-4 py-3 text-sm text-muted-foreground">
+                친구가 없어요. 모임 생성 후 코드로 초대할 수 있어요.
+              </div>
+            ) : (
+              <ScrollArea className="h-[180px] rounded-xl border border-border/60">
+                <div className="p-3 space-y-1">
+                  {friends.map(friend => (
+                    <div
+                      key={friend.id}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent cursor-pointer"
+                      onClick={() => toggleFriend(friend.id)}
+                    >
+                      <Checkbox
+                        checked={selectedFriends.includes(friend.id)}
+                        onCheckedChange={() => toggleFriend(friend.id)}
+                      />
+                      {friend.profileImageUrl && (
+                        <img src={friend.profileImageUrl} alt={friend.nickname} className="w-7 h-7 rounded-full object-cover" />
+                      )}
+                      <span className="text-sm">{friend.nickname}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+
+          {/* 일정 반영 설정 */}
+          <div className="rounded-xl border border-border/60 p-4 space-y-3">
+            <p className="text-sm font-medium">내 일정 반영</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm">시간표 반영</p>
+                <p className="text-xs text-muted-foreground">수업 시간을 자동으로 불가로 설정</p>
+              </div>
+              <Switch checked={reflectTimetable} onCheckedChange={setReflectTimetable} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm">캘린더 반영</p>
+                <p className="text-xs text-muted-foreground">캘린더 일정을 자동으로 불가로 설정</p>
+              </div>
+              <Switch checked={reflectCalendar} onCheckedChange={setReflectCalendar} />
+            </div>
+          </div>
         </main>
+
+        {/* 하단 버튼 */}
+        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background p-4">
+          <Button className="w-full" size="lg" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? '생성 중...' : '모임 만들기'}
+          </Button>
+        </div>
       </div>
     </ProtectedRoute>
   );

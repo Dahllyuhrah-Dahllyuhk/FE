@@ -123,6 +123,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* 모바일 탭하이라이트 제거 */
+  * {
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
@@ -171,6 +177,43 @@
   }
 }
 
+/* ─── 공통 페이지 레이아웃 ─── */
+.page-header {
+  @apply sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40;
+}
+.page-header-inner {
+  @apply flex items-center justify-between px-4 h-12 max-w-2xl mx-auto w-full;
+}
+.page-title {
+  @apply text-sm font-semibold text-foreground tracking-tight;
+}
+.page-main {
+  @apply flex-1 overflow-y-auto p-4;
+}
+
+/* ─── 데스크탑 콘텐츠 너비 제한 ─── */
+.content-area {
+  @apply max-w-2xl mx-auto w-full;
+}
+
+/* ─── 노션 스타일 카드 ─── */
+.notion-card {
+  @apply rounded-xl border border-border/60 bg-card transition-shadow duration-150;
+}
+.notion-card-hover {
+  @apply hover:shadow-sm hover:border-border;
+}
+
+/* ─── 섹션 타이틀 ─── */
+.section-title {
+  @apply text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3;
+}
+
+/* ─── 리스트 행 ─── */
+.list-row {
+  @apply flex items-center justify-between py-3 px-0 border-b border-border/30 last:border-0;
+}
+
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -178,6 +221,11 @@
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* 캘린더 - 이번 달 아닌 날짜 흐리게 */
+.calendar-other-month {
+  opacity: 0.35;
 }
 
 .animate-accordion-down {
