@@ -31,13 +31,24 @@ jobs:
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Resolve environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "api_base=https://matuabom.store" >> $GITHUB_OUTPUT
+            echo "is_prod=true" >> $GITHUB_OUTPUT
+          else
+            echo "api_base=https://dev.matuabom.store" >> $GITHUB_OUTPUT
+            echo "is_prod=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push image
         run: |
           IMAGE=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}
           SHA=${{ github.sha }}
 
           docker build \
-            --build-arg NEXT_PUBLIC_API_BASE=https://matuabom.store \
+            --build-arg NEXT_PUBLIC_API_BASE=${{ steps.env.outputs.api_base }} \
             --no-cache \
             -t $IMAGE:$SHA \
             -t $IMAGE:latest \
@@ -71,6 +82,7 @@ jobs:
           done
 
       - name: Deploy to EC2
+        if: github.ref_name == 'main'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
