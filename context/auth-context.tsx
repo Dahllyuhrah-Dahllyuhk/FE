@@ -99,16 +99,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     })();
   }, [fetchMe]);
 
-  // 로그인 완료 후 sessionStorage에 저장된 redirect 경로로 이동
+  // 로그인 완료 후 localStorage에 저장된 redirect 경로로 이동
   useEffect(() => {
     if (isLoading || !user) return;
     if (typeof window === 'undefined') return;
 
-    const redirectTo = sessionStorage.getItem('login_redirect');
+    const redirectTo = localStorage.getItem('login_redirect');
     if (redirectTo) {
-      sessionStorage.removeItem('login_redirect');
-      // 현재 이미 해당 경로에 있지 않을 때만 이동
-      if (pathname !== redirectTo && pathname === '/') {
+      localStorage.removeItem('login_redirect');
+      // 상대 경로만 허용 (오픈 리다이렉트 방지)
+      const isSafe = redirectTo.startsWith('/') && !redirectTo.startsWith('//');
+      if (isSafe && pathname !== redirectTo && pathname === '/') {
         router.replace(redirectTo);
       }
     }

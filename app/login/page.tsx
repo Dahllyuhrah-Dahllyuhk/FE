@@ -59,7 +59,7 @@ function LoginPageContent() {
   const kakaoLogin = () => {
     if (!ageChecked) return;
     if (redirect && redirect !== '/') {
-      sessionStorage.setItem('login_redirect', redirect);
+      localStorage.setItem('login_redirect', redirect);
     }
     window.location.href = `${API_BASE}/oauth2/authorization/kakao`;
   };

@@ -29,9 +29,12 @@ export function TimeRangeSelector({
   // 롱프레스 폴백용 상태 (토글 OFF일 때 사용)
   const [isMobileDragMode, setIsMobileDragMode] = useState(false);
 
-  // React state 배치 업데이트 타이밍 문제 우회용 ref
-  // (meeting-calendar의 monthDragRef 패턴과 동일)
+  // React state 배치 업데이트 타이밍 문제 우회용 ref (meeting-calendar 패턴)
+  // handleTouchEnd가 빠른 제스처 시 배치 커밋 전에 실행돼 stale state를 읽는 문제 방어
   const isDraggingRef = useRef(false);
+  const dragStartIdxRef = useRef<number | null>(null);
+  const dragEndIdxRef = useRef<number | null>(null);
+  const dragTargetSelectedRef = useRef<boolean>(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
@@ -124,21 +127,31 @@ export function TimeRangeSelector({
       if (disabled || !isMobile) return;
 
       if (dragToggle) {
-        // 토글 ON: 즉시 드래그 시작 (ref로 동기 설정)
+        // 토글 ON: 즉시 드래그 시작
+        const willSelect = !selectedSlots.includes(hour);
+        // ref 동기 설정 (handleTouchEnd가 빠른 제스처에도 올바른 값을 읽도록)
         isDraggingRef.current = true;
+        dragStartIdxRef.current = hour;
+        dragEndIdxRef.current = hour;
+        dragTargetSelectedRef.current = willSelect;
+        // state 설정 (렌더링용 시각 피드백)
         setIsDragging(true);
         setDragStartIdx(hour);
         setDragEndIdx(hour);
-        setDragTargetSelected(!selectedSlots.includes(hour));
+        setDragTargetSelected(willSelect);
       } else {
         // 토글 OFF: 롱프레스 400ms 후 드래그 모드 진입
         longPressTimerRef.current = setTimeout(() => {
+          const willSelect = !selectedSlots.includes(hour);
           isDraggingRef.current = true;
+          dragStartIdxRef.current = hour;
+          dragEndIdxRef.current = hour;
+          dragTargetSelectedRef.current = willSelect;
           setIsMobileDragMode(true);
           setIsDragging(true);
           setDragStartIdx(hour);
           setDragEndIdx(hour);
-          setDragTargetSelected(!selectedSlots.includes(hour));
+          setDragTargetSelected(willSelect);
           if (navigator.vibrate) navigator.vibrate(30);
         }, 400);
       }
@@ -148,12 +161,12 @@ export function TimeRangeSelector({
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      // ref를 체크해 state 타이밍 문제 우회 (meeting-calendar 패턴)
       if (!isDraggingRef.current) return;
       e.preventDefault(); // 드래그 중 페이지 스크롤 차단
       const touch = e.touches[0];
       const hour = getHourFromY(touch.clientY);
-      setDragEndIdx(hour);
+      dragEndIdxRef.current = hour; // ref 동기 업데이트
+      setDragEndIdx(hour);          // state 업데이트 (렌더링용)
     },
     [getHourFromY]
   );
@@ -165,31 +178,38 @@ export function TimeRangeSelector({
         longPressTimerRef.current = null;
       }
 
-      if (isDraggingRef.current && dragStartIdx !== null && dragEndIdx !== null) {
-        const start = Math.min(dragStartIdx, dragEndIdx);
-        const end = Math.max(dragStartIdx, dragEndIdx);
+      // ref 값으로 계산 (state 배치 업데이트 타이밍 문제 완전 우회)
+      if (isDraggingRef.current && dragStartIdxRef.current !== null && dragEndIdxRef.current !== null) {
+        const start = Math.min(dragStartIdxRef.current, dragEndIdxRef.current);
+        const end = Math.max(dragStartIdxRef.current, dragEndIdxRef.current);
         const newSlots = new Set(selectedSlots);
         for (let i = start; i <= end; i++) {
-          if (dragTargetSelected) newSlots.add(i);
+          if (dragTargetSelectedRef.current) newSlots.add(i);
           else newSlots.delete(i);
         }
         onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
       }
 
       isDraggingRef.current = false;
+      dragStartIdxRef.current = null;
+      dragEndIdxRef.current = null;
+      dragTargetSelectedRef.current = false;
       setIsDragging(false);
       // 토글 ON이면 드래그 모드 유지 (다음 터치도 즉시 드래그)
       if (!dragToggle) setIsMobileDragMode(false);
       setDragStartIdx(null);
       setDragEndIdx(null);
     },
-    [dragToggle, dragStartIdx, dragEndIdx, dragTargetSelected, selectedSlots, onSlotsChange]
+    [dragToggle, selectedSlots, onSlotsChange]
   );
 
   const handleDragToggleChange = (checked: boolean) => {
     setDragToggle(checked);
     if (!checked) {
       isDraggingRef.current = false;
+      dragStartIdxRef.current = null;
+      dragEndIdxRef.current = null;
+      dragTargetSelectedRef.current = false;
       setIsMobileDragMode(false);
       setIsDragging(false);
       setDragStartIdx(null);
