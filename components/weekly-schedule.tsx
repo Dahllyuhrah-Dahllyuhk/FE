@@ -470,8 +470,8 @@ export function WeeklySchedule() {
                         className="absolute left-0.5 right-0.5 rounded-md cursor-pointer overflow-hidden z-10 transition-all hover:brightness-90 active:scale-[0.98]"
                         style={{
                           ...style,
-                          backgroundColor: hexWithAlpha(slot.color, 0.5),
-                          borderLeft: `4px solid ${slot.color}`,
+                          backgroundColor: hexWithAlpha(slot.color, 0.18),
+                          borderLeft: `3px solid ${slot.color}`,
                           minHeight: '20px',
                         }}
                         onClick={(e) => {
@@ -479,18 +479,15 @@ export function WeeklySchedule() {
                           openEditDialog(slot);
                         }}
                       >
-                        <div className="px-1 pt-0.5 h-full flex flex-col">
-                          <p
-                            className="text-[10px] font-bold leading-tight truncate"
-                            style={{ color: slot.color }}
-                          >
+                        <div
+                          className="px-1 pt-0.5 h-full flex flex-col"
+                          style={{ backgroundColor: hexWithAlpha(slot.color, 0.72) }}
+                        >
+                          <p className="text-[10px] font-bold leading-tight truncate text-gray-900">
                             {slot.title}
                           </p>
                           {!isShort && (
-                            <p
-                              className="text-[9px] leading-none mt-0.5 font-medium"
-                              style={{ color: slot.color, opacity: 0.85 }}
-                            >
+                            <p className="text-[9px] leading-none mt-0.5 font-medium text-gray-800/80">
                               {slot.startTime}–{slot.endTime}
                             </p>
                           )}
