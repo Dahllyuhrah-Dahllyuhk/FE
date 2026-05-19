@@ -15,8 +15,8 @@ import {
   createCalendarEvent,
   updateCalendarEvent,
   deleteCalendarEvent,
-  prepareGoogleLink,
   API_BASE,
+  getAccessToken,
 } from '@/lib/api';
 import { RefreshCw } from 'lucide-react';
 import { mapRawToCalendarEvent } from '@/lib/calendar-utils';
@@ -97,13 +97,17 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
-  // SSE 부분 패치 — events-changed 이벤트만 여기서 처리 (전체 새로고침은 useSseSync가 담당)
+  // SSE 부분 패치 — events-changed 이벤트만 여기서 처리
   useEffect(() => {
-    const sseUrl = `${API_BASE}/api/sse/events`;
     let es: EventSource;
     let retryTimeout: ReturnType<typeof setTimeout>;
 
     const connect = () => {
+      const accessToken = getAccessToken();
+      const sseUrl = accessToken
+        ? `${API_BASE}/api/sse/events?token=${encodeURIComponent(accessToken)}`
+        : `${API_BASE}/api/sse/events`;
+
       es = new EventSource(sseUrl, { withCredentials: true });
 
       es.addEventListener('events-changed', (e: MessageEvent) => {
@@ -342,10 +346,18 @@ export default function HomePage() {
       return;
     }
 
+    // 구글 OAuth 리다이렉트 전 userId를 세션에 저장 (콜백에서 SecurityContext가 교체되므로)
+    try {
+      await fetch(`${API_BASE}/api/auth/prepare-google-link`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${getAccessToken() ?? ''}` },
+      });
+    } catch (e) {
+      console.error('prepare-google-link failed', e);
+    }
+
     const base = API_BASE || 'http://localhost:8080';
-    // OAuth 리다이렉트 후 SecurityContext가 Google 사용자로 교체되므로
-    // 세션에 userId를 미리 저장해 두어야 handleGoogleLogin이 userId를 식별할 수 있음
-    await prepareGoogleLink();
     window.location.href = `${base}/oauth2/authorization/google`;
   };
 

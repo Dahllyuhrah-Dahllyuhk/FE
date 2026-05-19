@@ -9,7 +9,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, setAccessToken, getAccessToken, exchangeAuthCode } from '@/lib/api';
 import { useSseSync } from '@/hooks/useSseSync';
 
 type User = {
@@ -38,9 +38,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchMe = useCallback(async () => {
     try {
+      const headers: Record<string, string> = {};
+      const token = getAccessToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(`${API_BASE}/api/auth/me`, {
         credentials: 'include',
+        headers,
       });
+
+      // rotate된 새 access token이 응답 헤더에 있으면 메모리에 저장
+      const newToken = res.headers.get('X-New-Access-Token');
+      if (newToken) setAccessToken(newToken);
 
       if (!res.ok) {
         setUser(null);
@@ -68,6 +77,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     (async () => {
+      // 로그인 후 BE가 ?code= 파라미터로 리다이렉트하면 access token 교환
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        if (code) {
+          try {
+            const token = await exchangeAuthCode(code);
+            setAccessToken(token);
+          } catch (e) {
+            console.error('Auth code exchange failed', e);
+          }
+          // URL에서 code 파라미터 제거
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
       await fetchMe();
       setIsLoading(false);
     })();

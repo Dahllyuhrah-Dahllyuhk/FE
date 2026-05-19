@@ -80,6 +80,7 @@ export type ParticipantSettingsUpdateRequest = {
 export type MeetingParticipant = {
   userId: string;
   name: string;
+  profileImageUrl?: string | null;
   status: 'ACCEPTED' | 'PENDING' | 'DECLINED';
   timeStatuses: ParticipantTimeStatus[];
   reflectTimetable: boolean;
