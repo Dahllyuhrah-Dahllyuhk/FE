@@ -58,15 +58,21 @@ export function TimeRangeSelector({
   }, [slotHeight]);
 
   // ── PC 포인터 드래그 ───────────────────────────────────────────────────────
+  // ref를 동기 설정해 stale closure 방지 (터치 핸들러와 동일한 패턴)
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, hour: number) => {
       if (disabled || isMobile) return;
       e.preventDefault();
       e.stopPropagation();
+      const willSelect = !selectedSlots.includes(hour);
+      isDraggingRef.current = true;
+      dragStartIdxRef.current = hour;
+      dragEndIdxRef.current = hour;
+      dragTargetSelectedRef.current = willSelect;
       setIsDragging(true);
       setDragStartIdx(hour);
       setDragEndIdx(hour);
-      setDragTargetSelected(!selectedSlots.includes(hour));
+      setDragTargetSelected(willSelect);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
     [disabled, selectedSlots, isMobile]
@@ -74,36 +80,42 @@ export function TimeRangeSelector({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging || !containerRef.current || isMobile) return;
+      // ref로 읽어 첫 move 이벤트에서 stale state(false)를 읽는 문제 방지
+      if (!isDraggingRef.current || !containerRef.current || isMobile) return;
       e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const y = e.clientY - rect.top;
       const hour = Math.max(0, Math.min(23, Math.floor(y / slotHeight)));
+      dragEndIdxRef.current = hour;
       setDragEndIdx(hour);
     },
-    [isDragging, slotHeight, isMobile]
+    [slotHeight, isMobile]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging || dragStartIdx === null || dragEndIdx === null || isMobile) {
+      if (!isDraggingRef.current || dragStartIdxRef.current === null || dragEndIdxRef.current === null || isMobile) {
+        isDraggingRef.current = false;
         setIsDragging(false);
         return;
       }
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      const start = Math.min(dragStartIdx, dragEndIdx);
-      const end = Math.max(dragStartIdx, dragEndIdx);
+      const start = Math.min(dragStartIdxRef.current, dragEndIdxRef.current);
+      const end = Math.max(dragStartIdxRef.current, dragEndIdxRef.current);
       const newSlots = new Set(selectedSlots);
       for (let i = start; i <= end; i++) {
-        if (dragTargetSelected) newSlots.add(i);
+        if (dragTargetSelectedRef.current) newSlots.add(i);
         else newSlots.delete(i);
       }
       onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
+      isDraggingRef.current = false;
+      dragStartIdxRef.current = null;
+      dragEndIdxRef.current = null;
       setIsDragging(false);
       setDragStartIdx(null);
       setDragEndIdx(null);
     },
-    [isDragging, dragStartIdx, dragEndIdx, dragTargetSelected, selectedSlots, onSlotsChange, isMobile]
+    [selectedSlots, onSlotsChange, isMobile]
   );
 
   // ── 모바일 단일 탭 ─────────────────────────────────────────────────────────
