@@ -78,7 +78,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     (async () => {
       // 로그인 후 BE가 ?code= 파라미터로 리다이렉트하면 access token 교환
-      if (typeof window !== 'undefined') {
+      // BE(JwtLoginSuccessHandler)는 항상 루트(/)에만 ?code=authCode 로 리다이렉트.
+      // 다른 경로의 ?code= 파라미터(모임 초대 코드 등)는 건드리지 않는다.
+      if (typeof window !== 'undefined' && window.location.pathname === '/') {
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
         if (code) {
