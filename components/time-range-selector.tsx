@@ -62,48 +62,70 @@ export function TimeRangeSelector({
     (e: React.PointerEvent, hour: number) => {
       if (disabled || isMobile) return;
       e.preventDefault();
-      e.stopPropagation();
+      const willSelect = !selectedSlots.includes(hour);
+      isDraggingRef.current = true;
+      dragStartIdxRef.current = hour;
+      dragEndIdxRef.current = hour;
+      dragTargetSelectedRef.current = willSelect;
       setIsDragging(true);
       setDragStartIdx(hour);
       setDragEndIdx(hour);
-      setDragTargetSelected(!selectedSlots.includes(hour));
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      setDragTargetSelected(willSelect);
+      // e.currentTarget = onPointerDown이 붙은 슬롯 div (e.target은 선택된 슬롯의 내부 span이 될 수 있음)
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
     [disabled, selectedSlots, isMobile]
   );
 
+  // 컨테이너 레벨 pointermove (폴백 — per-slot onMouseEnter가 주 추적)
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging || !containerRef.current || isMobile) return;
+      if (!isDraggingRef.current || !containerRef.current || isMobile) return;
       e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const y = e.clientY - rect.top;
       const hour = Math.max(0, Math.min(23, Math.floor(y / slotHeight)));
+      dragEndIdxRef.current = hour;
       setDragEndIdx(hour);
     },
-    [isDragging, slotHeight, isMobile]
+    [slotHeight, isMobile]
+  );
+
+  // 슬롯 단위 드래그 추적 (MeetingCalendar day view onMouseEnter 패턴)
+  // per-element 감지라 좌표 계산/capture 경로 의존 없이 확실하게 동작
+  const handleMouseEnterSlot = useCallback(
+    (hour: number) => {
+      if (!isDraggingRef.current || isMobile) return;
+      dragEndIdxRef.current = hour;
+      setDragEndIdx(hour);
+    },
+    [isMobile]
   );
 
   const handlePointerUp = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isDragging || dragStartIdx === null || dragEndIdx === null || isMobile) {
+    (_e: React.PointerEvent) => {
+      // pointerup 발생 시 브라우저가 capture를 자동 해제하므로 releasePointerCapture 불필요
+      if (!isDraggingRef.current || dragStartIdxRef.current === null || dragEndIdxRef.current === null || isMobile) {
+        isDraggingRef.current = false;
         setIsDragging(false);
         return;
       }
-      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      const start = Math.min(dragStartIdx, dragEndIdx);
-      const end = Math.max(dragStartIdx, dragEndIdx);
+      const start = Math.min(dragStartIdxRef.current, dragEndIdxRef.current);
+      const end = Math.max(dragStartIdxRef.current, dragEndIdxRef.current);
       const newSlots = new Set(selectedSlots);
       for (let i = start; i <= end; i++) {
-        if (dragTargetSelected) newSlots.add(i);
+        if (dragTargetSelectedRef.current) newSlots.add(i);
         else newSlots.delete(i);
       }
       onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
+      isDraggingRef.current = false;
+      dragStartIdxRef.current = null;
+      dragEndIdxRef.current = null;
       setIsDragging(false);
       setDragStartIdx(null);
       setDragEndIdx(null);
     },
-    [isDragging, dragStartIdx, dragEndIdx, dragTargetSelected, selectedSlots, onSlotsChange, isMobile]
+    [selectedSlots, onSlotsChange, isMobile]
   );
 
   // ── 모바일 단일 탭 ─────────────────────────────────────────────────────────
@@ -314,13 +336,15 @@ export function TimeRangeSelector({
                 )}
                 style={{ top: `${hour * slotHeight}px`, height: `${slotHeight}px` }}
                 onPointerDown={(e) => handlePointerDown(e, hour)}
+                onMouseEnter={() => handleMouseEnterSlot(hour)}
                 onClick={() => isMobile && handleSlotTap(hour)}
                 onTouchStart={(e) => handleTouchStart(e, hour)}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
               >
                 {isSelected && (
-                  <div className="absolute inset-0 flex items-center justify-center">
+                  // pointer-events-none: e.target이 항상 슬롯 div가 되도록 (inner span이 e.target이 되면 setPointerCapture 경로 꼬임)
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="text-[10px] font-semibold text-primary/80">✓</span>
                   </div>
                 )}
