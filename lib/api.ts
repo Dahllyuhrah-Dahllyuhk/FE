@@ -49,7 +49,7 @@ export async function exchangeAuthCode(code: string): Promise<string> {
   return data.accessToken as string;
 }
 
-async function apiFetch(input: string, init?: RequestInit) {
+async function apiFetch(input: string, init?: RequestInit, _retried = false) {
   const headers: Record<string, string> = {
     Accept: 'application/json',
     'Content-Type': 'application/json',
@@ -70,6 +70,22 @@ async function apiFetch(input: string, init?: RequestInit) {
   const newToken = res.headers.get('X-New-Access-Token');
   if (newToken) {
     _accessToken = newToken;
+  }
+
+  // 401 발생 시 1회 토큰 갱신 후 재시도
+  // (SSE 연결 등 동시 요청으로 인한 token rotation race condition 방어)
+  if (res.status === 401 && !_retried) {
+    try {
+      const refreshRes = await fetch(`${API_BASE}/api/auth/me`, {
+        credentials: 'include',
+      });
+      const refreshed = refreshRes.headers.get('X-New-Access-Token');
+      if (refreshRes.ok && refreshed) {
+        _accessToken = refreshed;
+        return apiFetch(input, init, true);
+      }
+    } catch {}
+    throw new Error('UNAUTHORIZED');
   }
 
   if (res.status === 401) {
