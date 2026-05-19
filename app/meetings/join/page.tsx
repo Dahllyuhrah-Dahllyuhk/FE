@@ -8,23 +8,25 @@ import { Input } from '@/components/ui/input';
 import { ProtectedRoute } from '@/components/protected-route';
 import { joinMeetingByCode } from '@/lib/api';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/auth-context';
 
 function JoinPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user, isLoading } = useAuth();
   const [code, setCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 
-  // URL에 code 파라미터가 있으면 자동 입력 + 자동 참여 시도
+  // 인증 완료 후에만 자동 참여 시도 (비로그인 상태에서 API 호출 시 401 toast 방지)
   useEffect(() => {
+    if (isLoading || !user) return;
     const urlCode = searchParams.get('code');
     if (urlCode) {
       const upper = urlCode.toUpperCase();
       setCode(upper);
-      // 코드가 URL에 있으면 자동으로 참여 시도
       handleJoinWithCode(upper);
     }
-  }, []); // eslint-disable-line
+  }, [user, isLoading]); // eslint-disable-line
 
   const handleJoinWithCode = async (targetCode: string) => {
     const trimmed = targetCode.trim().toUpperCase();
