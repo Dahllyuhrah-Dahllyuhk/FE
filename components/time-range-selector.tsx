@@ -3,6 +3,7 @@
 import type React from 'react';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 
 interface TimeRangeSelectorProps {
   selectedSlots: number[];
@@ -22,7 +23,8 @@ export function TimeRangeSelector({
   const [dragTargetSelected, setDragTargetSelected] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // 모바일 롱프레스 드래그 모드
+  // 모바일 드래그 토글 (Switch로 즉시 활성화) + 롱프레스 폴백
+  const [dragToggle, setDragToggle] = useState(false);
   const [isMobileDragMode, setIsMobileDragMode] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartHourRef = useRef<number | null>(null);
@@ -100,13 +102,13 @@ export function TimeRangeSelector({
   // ── 모바일 탭 (단일 선택) ────────────────────────────────────────────
   const handleSlotTap = useCallback(
     (hour: number) => {
-      if (disabled || isMobileDragMode) return;
+      if (disabled || isMobileDragMode || dragToggle) return;
       const newSlots = new Set(selectedSlots);
       if (newSlots.has(hour)) newSlots.delete(hour);
       else newSlots.add(hour);
       onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
     },
-    [disabled, selectedSlots, onSlotsChange, isMobileDragMode]
+    [disabled, selectedSlots, onSlotsChange, isMobileDragMode, dragToggle]
   );
 
   // ── 모바일 터치 드래그 ────────────────────────────────────────────────
@@ -115,18 +117,26 @@ export function TimeRangeSelector({
       if (disabled || !isMobile) return;
       touchStartHourRef.current = hour;
 
-      // 롱프레스 400ms → 드래그 모드 진입
-      longPressTimerRef.current = setTimeout(() => {
+      if (dragToggle) {
+        // 토글 ON: 즉시 드래그 모드 진입
         setIsMobileDragMode(true);
         setIsDragging(true);
         setDragStartIdx(hour);
         setDragEndIdx(hour);
         setDragTargetSelected(!selectedSlots.includes(hour));
-        // 진동 피드백 (지원 기기)
-        if (navigator.vibrate) navigator.vibrate(30);
-      }, 400);
+      } else {
+        // 토글 OFF: 롱프레스 400ms 후 드래그 모드 진입
+        longPressTimerRef.current = setTimeout(() => {
+          setIsMobileDragMode(true);
+          setIsDragging(true);
+          setDragStartIdx(hour);
+          setDragEndIdx(hour);
+          setDragTargetSelected(!selectedSlots.includes(hour));
+          if (navigator.vibrate) navigator.vibrate(30);
+        }, 400);
+      }
     },
-    [disabled, isMobile, selectedSlots]
+    [disabled, isMobile, dragToggle, selectedSlots]
   );
 
   const handleTouchMove = useCallback(
@@ -159,12 +169,13 @@ export function TimeRangeSelector({
       }
 
       setIsDragging(false);
-      setIsMobileDragMode(false);
+      // 토글 ON이면 드래그 모드 유지 (다음 터치도 즉시 드래그)
+      if (!dragToggle) setIsMobileDragMode(false);
       setDragStartIdx(null);
       setDragEndIdx(null);
       touchStartHourRef.current = null;
     },
-    [isMobileDragMode, isDragging, dragStartIdx, dragEndIdx, dragTargetSelected, selectedSlots, onSlotsChange]
+    [isMobileDragMode, isDragging, dragStartIdx, dragEndIdx, dragTargetSelected, selectedSlots, onSlotsChange, dragToggle]
   );
 
   const getSlotState = (
@@ -197,18 +208,26 @@ export function TimeRangeSelector({
     return ranges.join(', ');
   };
 
+  const handleDragToggleChange = (checked: boolean) => {
+    setDragToggle(checked);
+    if (!checked) {
+      setIsMobileDragMode(false);
+      setIsDragging(false);
+      setDragStartIdx(null);
+      setDragEndIdx(null);
+    }
+  };
+
   return (
     <div className="relative w-full">
-      {/* 모바일 안내 배너 */}
+      {/* 모바일 다중 선택 토글 (floating pill) */}
       {isMobile && (
-        <div className="mb-3 px-3 py-2.5 bg-primary/5 border border-primary/15 rounded-xl">
-          <p className="text-xs text-foreground/70 leading-relaxed">
-            <span className="font-medium text-foreground/90">탭</span>으로 단일 선택,{' '}
-            <span className="font-medium text-foreground/90">길게 누른 후 드래그</span>로 여러 시간대를 선택할 수 있어요.
-          </p>
-          {isMobileDragMode && (
-            <p className="text-xs text-primary font-medium mt-1">드래그 모드 활성</p>
-          )}
+        <div className="sm:hidden fixed bottom-20 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-full bg-background shadow-lg border border-border/60">
+          <span className="text-xs text-muted-foreground">다중 선택</span>
+          <Switch
+            checked={dragToggle}
+            onCheckedChange={handleDragToggleChange}
+          />
         </div>
       )}
 
