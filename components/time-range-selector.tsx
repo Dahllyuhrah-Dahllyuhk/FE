@@ -57,9 +57,10 @@ export function TimeRangeSelector({
     return Math.max(0, Math.min(23, Math.floor(y / slotHeight)));
   }, [slotHeight]);
 
-  // ── PC 포인터 드래그 ───────────────────────────────────────────────────────
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent, hour: number) => {
+  // ── PC 마우스 드래그 (MeetingCalendar day view 동일 패턴) ─────────────────
+  // setPointerCapture 미사용 — per-slot onMouseEnter로 드래그 추적
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent, hour: number) => {
       if (disabled || isMobile) return;
       e.preventDefault();
       const willSelect = !selectedSlots.includes(hour);
@@ -71,28 +72,11 @@ export function TimeRangeSelector({
       setDragStartIdx(hour);
       setDragEndIdx(hour);
       setDragTargetSelected(willSelect);
-      // e.currentTarget = onPointerDown이 붙은 슬롯 div (e.target은 선택된 슬롯의 내부 span이 될 수 있음)
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
     [disabled, selectedSlots, isMobile]
   );
 
-  // 컨테이너 레벨 pointermove (폴백 — per-slot onMouseEnter가 주 추적)
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!isDraggingRef.current || !containerRef.current || isMobile) return;
-      e.preventDefault();
-      const rect = containerRef.current.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const hour = Math.max(0, Math.min(23, Math.floor(y / slotHeight)));
-      dragEndIdxRef.current = hour;
-      setDragEndIdx(hour);
-    },
-    [slotHeight, isMobile]
-  );
-
   // 슬롯 단위 드래그 추적 (MeetingCalendar day view onMouseEnter 패턴)
-  // per-element 감지라 좌표 계산/capture 경로 의존 없이 확실하게 동작
   const handleMouseEnterSlot = useCallback(
     (hour: number) => {
       if (!isDraggingRef.current || isMobile) return;
@@ -102,9 +86,8 @@ export function TimeRangeSelector({
     [isMobile]
   );
 
-  const handlePointerUp = useCallback(
-    (_e: React.PointerEvent) => {
-      // pointerup 발생 시 브라우저가 capture를 자동 해제하므로 releasePointerCapture 불필요
+  const handleMouseUp = useCallback(
+    () => {
       if (!isDraggingRef.current || dragStartIdxRef.current === null || dragEndIdxRef.current === null || isMobile) {
         isDraggingRef.current = false;
         setIsDragging(false);
@@ -298,9 +281,8 @@ export function TimeRangeSelector({
           (dragToggle || isMobileDragMode) && 'touch-none'
         )}
         style={{ height: `${24 * slotHeight}px` }}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={!isMobile ? handlePointerUp : undefined}
+        onMouseUp={!isMobile ? handleMouseUp : undefined}
+        onMouseLeave={!isMobile ? handleMouseUp : undefined}
       >
         {/* 시간 레이블 */}
         {Array.from({ length: 23 }).map((_, idx) => {
@@ -335,7 +317,7 @@ export function TimeRangeSelector({
                   !disabled && 'cursor-pointer'
                 )}
                 style={{ top: `${hour * slotHeight}px`, height: `${slotHeight}px` }}
-                onPointerDown={(e) => handlePointerDown(e, hour)}
+                onMouseDown={(e) => handleMouseDown(e, hour)}
                 onMouseEnter={() => handleMouseEnterSlot(hour)}
                 onClick={() => isMobile && handleSlotTap(hour)}
                 onTouchStart={(e) => handleTouchStart(e, hour)}
@@ -343,7 +325,6 @@ export function TimeRangeSelector({
                 onTouchEnd={handleTouchEnd}
               >
                 {isSelected && (
-                  // pointer-events-none: e.target이 항상 슬롯 div가 되도록 (inner span이 e.target이 되면 setPointerCapture 경로 꼬임)
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className="text-[10px] font-semibold text-primary/80">✓</span>
                   </div>
