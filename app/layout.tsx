@@ -6,7 +6,6 @@ import { AuthProvider } from '@/context/auth-context';
 import { EventRefreshProvider } from '@/hooks/useEventRefresh';
 import { Toaster } from '@/components/ui/toaster';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { InAppBrowserGuard } from '@/components/inapp-browser-guard';
 import './globals.css';
 
 const _geist = Geist({ subsets: ['latin'] });
@@ -73,7 +72,6 @@ export default function RootLayout({
           <ErrorBoundary>
             <AuthProvider>
               <EventRefreshProvider>
-                <InAppBrowserGuard />
                 {children}
                 <Toaster />
               </EventRefreshProvider>

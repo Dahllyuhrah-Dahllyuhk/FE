@@ -45,15 +45,23 @@ jobs:
           IMAGE=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}
           SHA=${{ github.sha }}
 
+          # main → :latest (프로덕션), develop → :dev-latest (개발)
+          # 동일 :latest 태그 공유 시 develop 빌드가 프로덕션 이미지를 덮어쓰는 문제 방지
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            FLOAT_TAG="latest"
+          else
+            FLOAT_TAG="dev-latest"
+          fi
+
           docker build \
             --build-arg NEXT_PUBLIC_API_BASE=${{ steps.env.outputs.api_base }} \
             --no-cache \
             -t $IMAGE:$SHA \
-            -t $IMAGE:latest \
+            -t $IMAGE:$FLOAT_TAG \
             .
 
           docker push $IMAGE:$SHA
-          docker push $IMAGE:latest
+          docker push $IMAGE:$FLOAT_TAG
 
       - name: Prune old ECR images (keep latest 3)
         run: |
@@ -92,6 +100,7 @@ jobs:
             --cidr ${{ steps.ip.outputs.ipv4 }}/32
 
       - name: Deploy to EC2
+        if: github.ref_name == 'main'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
