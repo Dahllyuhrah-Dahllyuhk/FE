@@ -36,10 +36,8 @@ jobs:
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             echo "api_base=https://matuabom.store" >> $GITHUB_OUTPUT
-            echo "is_prod=true" >> $GITHUB_OUTPUT
           else
             echo "api_base=https://dev.matuabom.store" >> $GITHUB_OUTPUT
-            echo "is_prod=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Build and push image
@@ -86,7 +84,6 @@ jobs:
         run: echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
 
       - name: Configure AWS Security Group Allow
-        if: github.ref_name == 'main'
         run: |
           aws ec2 authorize-security-group-ingress \
             --group-id ${{ secrets.AWS_SG_ID }} \
@@ -95,7 +92,6 @@ jobs:
             --cidr ${{ steps.ip.outputs.ipv4 }}/32
 
       - name: Deploy to EC2
-        if: github.ref_name == 'main'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
@@ -107,6 +103,7 @@ jobs:
                 ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
 
             cd /home/ubuntu/Deploy
+            docker system prune -f
             docker compose pull fe
             docker compose up -d --no-deps --force-recreate fe
 
@@ -133,7 +130,7 @@ jobs:
             docker image prune -f
 
       - name: Configure AWS Security Group Revoke
-        if: always()
+        if: always() && steps.ip.outputs.ipv4 != ''
         run: |
           aws ec2 revoke-security-group-ingress \
             --group-id ${{ secrets.AWS_SG_ID }} \

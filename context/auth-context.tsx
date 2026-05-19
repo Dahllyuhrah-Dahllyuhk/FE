@@ -9,7 +9,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { API_BASE } from '@/lib/api';
+import { API_BASE, setAccessToken, getAccessToken, exchangeAuthCode } from '@/lib/api';
 import { useSseSync } from '@/hooks/useSseSync';
 
 type User = {
@@ -38,9 +38,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchMe = useCallback(async () => {
     try {
+      const headers: Record<string, string> = {};
+      const token = getAccessToken();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch(`${API_BASE}/api/auth/me`, {
         credentials: 'include',
+        headers,
       });
+
+      // rotate된 새 access token이 응답 헤더에 있으면 메모리에 저장
+      const newToken = res.headers.get('X-New-Access-Token');
+      if (newToken) setAccessToken(newToken);
 
       if (!res.ok) {
         setUser(null);
@@ -68,21 +77,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     (async () => {
+      // 로그인 후 BE가 ?code= 파라미터로 리다이렉트하면 access token 교환
+      // BE(JwtLoginSuccessHandler)는 항상 루트(/)에만 ?code=authCode 로 리다이렉트.
+      // 다른 경로의 ?code= 파라미터(모임 초대 코드 등)는 건드리지 않는다.
+      if (typeof window !== 'undefined' && window.location.pathname === '/') {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        if (code) {
+          try {
+            const token = await exchangeAuthCode(code);
+            setAccessToken(token);
+          } catch (e) {
+            console.error('Auth code exchange failed', e);
+          }
+          // URL에서 code 파라미터 제거
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
       await fetchMe();
       setIsLoading(false);
     })();
   }, [fetchMe]);
 
-  // 로그인 완료 후 sessionStorage에 저장된 redirect 경로로 이동
+  // 로그인 완료 후 localStorage에 저장된 redirect 경로로 이동
   useEffect(() => {
     if (isLoading || !user) return;
     if (typeof window === 'undefined') return;
 
-    const redirectTo = sessionStorage.getItem('login_redirect');
+    const redirectTo = localStorage.getItem('login_redirect');
     if (redirectTo) {
-      sessionStorage.removeItem('login_redirect');
-      // 현재 이미 해당 경로에 있지 않을 때만 이동
-      if (pathname !== redirectTo && pathname === '/') {
+      localStorage.removeItem('login_redirect');
+      // 상대 경로만 허용 (오픈 리다이렉트 방지)
+      const isSafe = redirectTo.startsWith('/') && !redirectTo.startsWith('//');
+      if (isSafe && pathname !== redirectTo && pathname === '/') {
         router.replace(redirectTo);
       }
     }

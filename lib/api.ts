@@ -27,16 +27,66 @@ export type AvailabilitySlotUpdatePayload = {
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
 
-async function apiFetch(input: string, init?: RequestInit) {
+// ── Access Token 메모리 저장소 ────────────────────────────────────────────────
+// httpOnly 쿠키 대신 JS 메모리에 보관 (CSRF 완전 차단, 카카오 인앱브라우저 쿠키 격리 우회)
+let _accessToken: string | null = null;
+
+export function setAccessToken(token: string | null) {
+  _accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return _accessToken;
+}
+
+// ── 인증 코드 → Access Token 교환 ────────────────────────────────────────────
+export async function exchangeAuthCode(code: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/auth/token?code=${code}`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('AUTH_CODE_EXCHANGE_FAILED');
+  const data = await res.json();
+  return data.accessToken as string;
+}
+
+async function apiFetch(input: string, init?: RequestInit, _retried = false) {
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> || {}),
+  };
+
+  if (_accessToken) {
+    headers['Authorization'] = `Bearer ${_accessToken}`;
+  }
+
   const res = await fetch(`${API_BASE}${input}`, {
     credentials: 'include',
     ...init,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
+    headers,
   });
+
+  // rotate된 새 access token이 응답 헤더에 있으면 메모리 갱신
+  const newToken = res.headers.get('X-New-Access-Token');
+  if (newToken) {
+    _accessToken = newToken;
+  }
+
+  // 401 발생 시 1회 토큰 갱신 후 재시도
+  // (SSE 연결 등 동시 요청으로 인한 token rotation race condition 방어)
+  if (res.status === 401 && !_retried) {
+    try {
+      const refreshRes = await fetch(`${API_BASE}/api/auth/me`, {
+        credentials: 'include',
+      });
+      const refreshed = refreshRes.headers.get('X-New-Access-Token');
+      if (refreshRes.ok && refreshed) {
+        _accessToken = refreshed;
+        return apiFetch(input, init, true);
+      }
+    } catch {}
+    throw new Error('UNAUTHORIZED');
+  }
 
   if (res.status === 401) {
     throw new Error('UNAUTHORIZED');
@@ -55,6 +105,25 @@ async function apiFetch(input: string, init?: RequestInit) {
   }
 
   return res;
+}
+
+/* ===================== Auth helpers ===================== */
+
+/**
+ * 구글 캘린더 연동 전 호출.
+ * OAuth 리다이렉트 이후 SecurityContext가 Google OAuth2 사용자로 교체되므로
+ * 세션에 현재 userId를 미리 저장해 두어야 handleGoogleLogin이 userId를 식별할 수 있다.
+ */
+export async function prepareGoogleLink(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/prepare-google-link`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 /* ===================== Calendar APIs ===================== */

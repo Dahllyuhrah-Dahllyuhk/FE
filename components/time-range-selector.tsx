@@ -3,6 +3,8 @@
 import type React from 'react';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
+import { CalendarDays } from 'lucide-react';
 
 interface TimeRangeSelectorProps {
   selectedSlots: number[];
@@ -22,42 +24,55 @@ export function TimeRangeSelector({
   const [dragTargetSelected, setDragTargetSelected] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // 모바일 롱프레스 드래그 모드
+  // Switch 토글 (사전 설정 — 클로저에서 항상 최신값 사용 가능)
+  const [dragToggle, setDragToggle] = useState(false);
+  // 롱프레스 폴백용 상태 (토글 OFF일 때 사용)
   const [isMobileDragMode, setIsMobileDragMode] = useState(false);
+
+  // React state 배치 업데이트 타이밍 문제 우회용 ref (meeting-calendar 패턴)
+  // handleTouchEnd가 빠른 제스처 시 배치 커밋 전에 실행돼 stale state를 읽는 문제 방어
+  const isDraggingRef = useRef(false);
+  const dragStartIdxRef = useRef<number | null>(null);
+  const dragEndIdxRef = useRef<number | null>(null);
+  const dragTargetSelectedRef = useRef<boolean>(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const touchStartHourRef = useRef<number | null>(null);
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const slotHeight = 48;
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const check = () => setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
-  const formatHour = (hour: number): string => `${hour.toString().padStart(2, '0')}:00`;
+  const formatHour = (hour: number) => `${hour.toString().padStart(2, '0')}:00`;
 
   const getHourFromY = useCallback((clientY: number): number => {
     if (!containerRef.current) return 0;
     const rect = containerRef.current.getBoundingClientRect();
+    // getBoundingClientRect()는 뷰포트 기준, clientY도 뷰포트 기준이므로 스크롤 보정 불필요
     const y = clientY - rect.top;
     return Math.max(0, Math.min(23, Math.floor(y / slotHeight)));
   }, [slotHeight]);
 
-  // ── PC 드래그 ──────────────────────────────────────────────────────────
+  // ── PC 포인터 드래그 ───────────────────────────────────────────────────────
+  // ref를 동기 설정해 stale closure 방지 (터치 핸들러와 동일한 패턴)
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, hour: number) => {
       if (disabled || isMobile) return;
       e.preventDefault();
       e.stopPropagation();
+      const willSelect = !selectedSlots.includes(hour);
+      isDraggingRef.current = true;
+      dragStartIdxRef.current = hour;
+      dragEndIdxRef.current = hour;
+      dragTargetSelectedRef.current = willSelect;
       setIsDragging(true);
       setDragStartIdx(hour);
       setDragEndIdx(hour);
-      setDragTargetSelected(!selectedSlots.includes(hour));
+      setDragTargetSelected(willSelect);
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
     },
     [disabled, selectedSlots, isMobile]
@@ -65,111 +80,156 @@ export function TimeRangeSelector({
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging || !containerRef.current || isMobile) return;
+      // ref로 읽어 첫 move 이벤트에서 stale state(false)를 읽는 문제 방지
+      if (!isDraggingRef.current || !containerRef.current || isMobile) return;
       e.preventDefault();
       const rect = containerRef.current.getBoundingClientRect();
       const y = e.clientY - rect.top;
       const hour = Math.max(0, Math.min(23, Math.floor(y / slotHeight)));
+      dragEndIdxRef.current = hour;
       setDragEndIdx(hour);
     },
-    [isDragging, slotHeight, isMobile]
+    [slotHeight, isMobile]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent) => {
-      if (!isDragging || dragStartIdx === null || dragEndIdx === null || isMobile) {
+      if (!isDraggingRef.current || dragStartIdxRef.current === null || dragEndIdxRef.current === null || isMobile) {
+        isDraggingRef.current = false;
         setIsDragging(false);
         return;
       }
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      const start = Math.min(dragStartIdx, dragEndIdx);
-      const end = Math.max(dragStartIdx, dragEndIdx);
+      const start = Math.min(dragStartIdxRef.current, dragEndIdxRef.current);
+      const end = Math.max(dragStartIdxRef.current, dragEndIdxRef.current);
       const newSlots = new Set(selectedSlots);
       for (let i = start; i <= end; i++) {
-        if (dragTargetSelected) newSlots.add(i);
+        if (dragTargetSelectedRef.current) newSlots.add(i);
         else newSlots.delete(i);
       }
       onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
+      isDraggingRef.current = false;
+      dragStartIdxRef.current = null;
+      dragEndIdxRef.current = null;
       setIsDragging(false);
       setDragStartIdx(null);
       setDragEndIdx(null);
     },
-    [isDragging, dragStartIdx, dragEndIdx, dragTargetSelected, selectedSlots, onSlotsChange, isMobile]
+    [selectedSlots, onSlotsChange, isMobile]
   );
 
-  // ── 모바일 탭 (단일 선택) ────────────────────────────────────────────
+  // ── 모바일 단일 탭 ─────────────────────────────────────────────────────────
   const handleSlotTap = useCallback(
     (hour: number) => {
-      if (disabled || isMobileDragMode) return;
+      if (disabled || isMobileDragMode || dragToggle) return;
       const newSlots = new Set(selectedSlots);
       if (newSlots.has(hour)) newSlots.delete(hour);
       else newSlots.add(hour);
       onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
     },
-    [disabled, selectedSlots, onSlotsChange, isMobileDragMode]
+    [disabled, selectedSlots, onSlotsChange, isMobileDragMode, dragToggle]
   );
 
-  // ── 모바일 터치 드래그 ────────────────────────────────────────────────
+  // ── 모바일 터치 드래그 ─────────────────────────────────────────────────────
+  // meeting-calendar의 day view 터치 드래그 패턴과 동일한 방식:
+  // - isDraggingRef(ref)로 동기 상태 추적 → handleTouchMove 클로저 타이밍 문제 해결
+  // - dragToggle(사전 설정 state)로 touch-none 적용 → 페이지 스크롤 방지
   const handleTouchStart = useCallback(
     (e: React.TouchEvent, hour: number) => {
       if (disabled || !isMobile) return;
-      touchStartHourRef.current = hour;
 
-      // 롱프레스 400ms → 드래그 모드 진입
-      longPressTimerRef.current = setTimeout(() => {
-        setIsMobileDragMode(true);
+      if (dragToggle) {
+        // 토글 ON: 즉시 드래그 시작
+        const willSelect = !selectedSlots.includes(hour);
+        // ref 동기 설정 (handleTouchEnd가 빠른 제스처에도 올바른 값을 읽도록)
+        isDraggingRef.current = true;
+        dragStartIdxRef.current = hour;
+        dragEndIdxRef.current = hour;
+        dragTargetSelectedRef.current = willSelect;
+        // state 설정 (렌더링용 시각 피드백)
         setIsDragging(true);
         setDragStartIdx(hour);
         setDragEndIdx(hour);
-        setDragTargetSelected(!selectedSlots.includes(hour));
-        // 진동 피드백 (지원 기기)
-        if (navigator.vibrate) navigator.vibrate(30);
-      }, 400);
+        setDragTargetSelected(willSelect);
+      } else {
+        // 토글 OFF: 롱프레스 400ms 후 드래그 모드 진입
+        longPressTimerRef.current = setTimeout(() => {
+          const willSelect = !selectedSlots.includes(hour);
+          isDraggingRef.current = true;
+          dragStartIdxRef.current = hour;
+          dragEndIdxRef.current = hour;
+          dragTargetSelectedRef.current = willSelect;
+          setIsMobileDragMode(true);
+          setIsDragging(true);
+          setDragStartIdx(hour);
+          setDragEndIdx(hour);
+          setDragTargetSelected(willSelect);
+          if (navigator.vibrate) navigator.vibrate(30);
+        }, 400);
+      }
     },
-    [disabled, isMobile, selectedSlots]
+    [disabled, isMobile, dragToggle, selectedSlots]
   );
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      if (!isMobileDragMode || !isDragging) return;
-      e.preventDefault(); // 스크롤 차단 (드래그 모드에서만)
+      if (!isDraggingRef.current) return;
+      e.preventDefault(); // 드래그 중 페이지 스크롤 차단
       const touch = e.touches[0];
       const hour = getHourFromY(touch.clientY);
-      setDragEndIdx(hour);
+      dragEndIdxRef.current = hour; // ref 동기 업데이트
+      setDragEndIdx(hour);          // state 업데이트 (렌더링용)
     },
-    [isMobileDragMode, isDragging, getHourFromY]
+    [getHourFromY]
   );
 
   const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
+    (_e: React.TouchEvent) => {
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
       }
 
-      if (isMobileDragMode && isDragging && dragStartIdx !== null && dragEndIdx !== null) {
-        const start = Math.min(dragStartIdx, dragEndIdx);
-        const end = Math.max(dragStartIdx, dragEndIdx);
+      // ref 값으로 계산 (state 배치 업데이트 타이밍 문제 완전 우회)
+      if (isDraggingRef.current && dragStartIdxRef.current !== null && dragEndIdxRef.current !== null) {
+        const start = Math.min(dragStartIdxRef.current, dragEndIdxRef.current);
+        const end = Math.max(dragStartIdxRef.current, dragEndIdxRef.current);
         const newSlots = new Set(selectedSlots);
         for (let i = start; i <= end; i++) {
-          if (dragTargetSelected) newSlots.add(i);
+          if (dragTargetSelectedRef.current) newSlots.add(i);
           else newSlots.delete(i);
         }
         onSlotsChange(Array.from(newSlots).sort((a, b) => a - b));
       }
 
+      isDraggingRef.current = false;
+      dragStartIdxRef.current = null;
+      dragEndIdxRef.current = null;
+      dragTargetSelectedRef.current = false;
       setIsDragging(false);
-      setIsMobileDragMode(false);
+      // 토글 ON이면 드래그 모드 유지 (다음 터치도 즉시 드래그)
+      if (!dragToggle) setIsMobileDragMode(false);
       setDragStartIdx(null);
       setDragEndIdx(null);
-      touchStartHourRef.current = null;
     },
-    [isMobileDragMode, isDragging, dragStartIdx, dragEndIdx, dragTargetSelected, selectedSlots, onSlotsChange]
+    [dragToggle, selectedSlots, onSlotsChange]
   );
 
-  const getSlotState = (
-    hour: number
-  ): 'selected' | 'unselected' | 'drag-select' | 'drag-deselect' => {
+  const handleDragToggleChange = (checked: boolean) => {
+    setDragToggle(checked);
+    if (!checked) {
+      isDraggingRef.current = false;
+      dragStartIdxRef.current = null;
+      dragEndIdxRef.current = null;
+      dragTargetSelectedRef.current = false;
+      setIsMobileDragMode(false);
+      setIsDragging(false);
+      setDragStartIdx(null);
+      setDragEndIdx(null);
+    }
+  };
+
+  const getSlotState = (hour: number): 'selected' | 'unselected' | 'drag-select' | 'drag-deselect' => {
     if (isDragging && dragStartIdx !== null && dragEndIdx !== null) {
       const start = Math.min(dragStartIdx, dragEndIdx);
       const end = Math.max(dragStartIdx, dragEndIdx);
@@ -199,16 +259,22 @@ export function TimeRangeSelector({
 
   return (
     <div className="relative w-full">
-      {/* 모바일 안내 배너 */}
+      {/* 모바일 전용 다중 선택 토글 (meeting-calendar day view와 동일한 floating pill 스타일) */}
       {isMobile && (
-        <div className="mb-3 px-3 py-2.5 bg-primary/5 border border-primary/15 rounded-xl">
-          <p className="text-xs text-foreground/70 leading-relaxed">
-            <span className="font-medium text-foreground/90">탭</span>으로 단일 선택,{' '}
-            <span className="font-medium text-foreground/90">길게 누른 후 드래그</span>로 여러 시간대를 선택할 수 있어요.
-          </p>
-          {isMobileDragMode && (
-            <p className="text-xs text-primary font-medium mt-1">드래그 모드 활성</p>
-          )}
+        <div className={cn(
+          'sm:hidden fixed bottom-20 right-4 z-50',
+          'flex items-center gap-2 px-3 py-2 rounded-full shadow-lg border',
+          dragToggle
+            ? 'bg-primary text-primary-foreground border-primary'
+            : 'bg-background text-foreground border-border'
+        )}>
+          <CalendarDays className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="text-xs font-medium whitespace-nowrap">다중 선택</span>
+          <Switch
+            checked={dragToggle}
+            onCheckedChange={handleDragToggleChange}
+            className="scale-75"
+          />
         </div>
       )}
 
@@ -217,7 +283,9 @@ export function TimeRangeSelector({
         className={cn(
           'relative border border-border/60 rounded-xl overflow-hidden bg-muted/10',
           disabled && 'opacity-50 cursor-not-allowed',
-          isMobileDragMode && 'touch-none'
+          // dragToggle은 사전 설정 state → 타이밍 문제 없이 touch-none 즉시 적용
+          // (페이지 스크롤 방지, meeting-calendar의 dayDragMode ? 'touch-none' 패턴과 동일)
+          (dragToggle || isMobileDragMode) && 'touch-none'
         )}
         style={{ height: `${24 * slotHeight}px` }}
         onPointerMove={handlePointerMove}
@@ -258,7 +326,7 @@ export function TimeRangeSelector({
                 )}
                 style={{ top: `${hour * slotHeight}px`, height: `${slotHeight}px` }}
                 onPointerDown={(e) => handlePointerDown(e, hour)}
-                onClick={() => isMobile && !isMobileDragMode && handleSlotTap(hour)}
+                onClick={() => isMobile && handleSlotTap(hour)}
                 onTouchStart={(e) => handleTouchStart(e, hour)}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
@@ -275,7 +343,7 @@ export function TimeRangeSelector({
         </div>
       </div>
 
-      {/* 선택된 시간대 */}
+      {/* 선택된 시간대 요약 */}
       <div className="mt-3 px-4 py-3 rounded-xl bg-muted/30 border border-border/40">
         <div className="text-xs font-medium text-foreground/60 mb-1">선택된 시간대</div>
         <div className="text-sm text-foreground/80">{getSelectedRangesText()}</div>
