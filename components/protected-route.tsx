@@ -5,6 +5,7 @@ import { useEffect } from "react"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
 import { Suspense } from "react"
+import { SplashScreen } from "@/components/splash-screen"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -25,14 +26,7 @@ function ProtectedRouteInner({ children }: ProtectedRouteProps) {
   }, [user, isLoading, router, pathname, searchParams])
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent" />
-          <p className="text-foreground">로딩 중...</p>
-        </div>
-      </div>
-    )
+    return <SplashScreen />
   }
 
   if (!user) return null
@@ -42,11 +36,7 @@ function ProtectedRouteInner({ children }: ProtectedRouteProps) {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-primary border-r-transparent" />
-      </div>
-    }>
+    <Suspense fallback={<SplashScreen />}>
       <ProtectedRouteInner>{children}</ProtectedRouteInner>
     </Suspense>
   )

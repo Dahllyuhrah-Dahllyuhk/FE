@@ -20,6 +20,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { toast } from '@/hooks/use-toast';
 import { createMeeting, fetchFriends, type FriendDto } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -76,6 +77,7 @@ export default function CreateMeetingPage() {
   const [reflectCalendar, setReflectCalendar] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   useEffect(() => {
     fetchFriends()
@@ -145,7 +147,7 @@ export default function CreateMeetingPage() {
           {/* 날짜 범위 */}
           <div className="space-y-1.5">
             <Label className="text-sm font-medium">후보 날짜 범위</Label>
-            <Popover>
+            <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -168,6 +170,15 @@ export default function CreateMeetingPage() {
                   initialFocus
                   locale={ko}
                 />
+                <div className="border-t border-border p-2">
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setDatePickerOpen(false)}
+                  >
+                    완료
+                  </Button>
+                </div>
               </PopoverContent>
             </Popover>
           </div>
@@ -242,9 +253,12 @@ export default function CreateMeetingPage() {
                         checked={selectedFriends.includes(friend.id)}
                         onCheckedChange={() => toggleFriend(friend.id)}
                       />
-                      {friend.profileImageUrl && (
-                        <img src={friend.profileImageUrl} alt={friend.nickname} className="w-7 h-7 rounded-full object-cover" />
-                      )}
+                      <Avatar className="h-7 w-7 flex-shrink-0">
+                        <AvatarImage src={friend.profileImageUrl ?? undefined} alt={friend.nickname} />
+                        <AvatarFallback className="text-[10px] bg-primary/20 text-primary">
+                          {friend.nickname?.[0] ?? '?'}
+                        </AvatarFallback>
+                      </Avatar>
                       <span className="text-sm">{friend.nickname}</span>
                     </div>
                   ))}
@@ -274,7 +288,7 @@ export default function CreateMeetingPage() {
         </main>
 
         {/* 하단 버튼 */}
-        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background p-4">
+        <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background p-4 z-30">
           <Button className="w-full" size="lg" onClick={handleSubmit} disabled={isSubmitting}>
             {isSubmitting ? '생성 중...' : '모임 만들기'}
           </Button>
