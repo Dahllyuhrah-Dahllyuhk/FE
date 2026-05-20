@@ -4,15 +4,9 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # 의존성 파일만 먼저 복사 (레이어 캐시 최대화)
-COPY package.json package-lock.json* pnpm-lock.yaml* ./
+COPY package.json package-lock.json ./
 
-RUN if [ -f pnpm-lock.yaml ]; then \
-      corepack enable && pnpm install --frozen-lockfile; \
-    elif [ -f package-lock.json ]; then \
-      npm ci; \
-    else \
-      npm install; \
-    fi
+RUN npm ci
 
 # 소스 복사
 COPY . .
