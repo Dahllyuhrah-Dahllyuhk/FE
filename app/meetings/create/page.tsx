@@ -39,7 +39,7 @@ function slotsToConstraints(slots: number[]) {
     } else {
       ranges.push({
         startTime: `${start.toString().padStart(2, '0')}:00:00`,
-        endTime: `${(end + 1).toString().padStart(2, '0')}:00:00`,
+        endTime: end + 1 >= 24 ? '23:59:59' : `${(end + 1).toString().padStart(2, '0')}:00:00`,
       });
       if (i < sorted.length) { start = sorted[i]; end = sorted[i]; }
     }
