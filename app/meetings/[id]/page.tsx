@@ -228,7 +228,7 @@ export default function MeetingDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <ProtectedRoute>
-      <div className="flex min-h-screen flex-col bg-background">
+      <div className="flex h-dvh flex-col overflow-hidden bg-background">
 
         {/* ── 헤더 ── */}
         <header className="page-header">
