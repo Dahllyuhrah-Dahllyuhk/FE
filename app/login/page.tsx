@@ -6,55 +6,18 @@ import { useAuth } from '@/context/auth-context';
 import { API_BASE } from '@/lib/api';
 import Link from 'next/link';
 
-function detectInAppBrowser(): { isInApp: boolean; name: string } {
-  if (typeof navigator === 'undefined') return { isInApp: false, name: '' };
-  const ua = navigator.userAgent;
-  if (/KAKAOTALK/i.test(ua)) return { isInApp: true, name: '카카오톡' };
-  if (/NAVER/i.test(ua)) return { isInApp: true, name: '네이버' };
-  if (/Instagram/i.test(ua)) return { isInApp: true, name: '인스타그램' };
-  if (/FB_IAB|FBAN|FBAV/i.test(ua)) return { isInApp: true, name: '페이스북' };
-  if (/Line\//i.test(ua)) return { isInApp: true, name: 'LINE' };
-  return { isInApp: false, name: '' };
-}
-
-function openInExternalBrowser() {
-  const ua = navigator.userAgent;
-  const url = window.location.href;
-  if (/Android/.test(ua)) {
-    window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
-  }
-}
-
 function LoginPageContent() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/';
   const [ageChecked, setAgeChecked] = useState(false);
-  const [inAppInfo, setInAppInfo] = useState<{ isInApp: boolean; name: string }>({ isInApp: false, name: '' });
-  const [urlCopied, setUrlCopied] = useState(false);
-
-  useEffect(() => {
-    setInAppInfo(detectInAppBrowser());
-  }, []);
 
   useEffect(() => {
     if (!isLoading && user) {
       router.replace(redirect);
     }
   }, [isLoading, user, router, redirect]);
-
-  const handleOpenExternal = () => {
-    openInExternalBrowser();
-    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(window.location.href).then(() => {
-          setUrlCopied(true);
-          setTimeout(() => setUrlCopied(false), 3000);
-        });
-      }
-    }
-  };
 
   const kakaoLogin = () => {
     if (!ageChecked) return;
@@ -77,34 +40,6 @@ function LoginPageContent() {
             <p className="text-sm text-muted-foreground">일정을 함께 조율해요</p>
           </div>
         </div>
-
-        {/* 인앱브라우저 안내 */}
-        {inAppInfo.isInApp && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800/40 p-4 space-y-3">
-            <div className="flex items-start gap-2.5">
-              <span className="text-lg flex-shrink-0">⚠️</span>
-              <div>
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                  {inAppInfo.name} 앱에서는 카카오 로그인이 제한될 수 있습니다
-                </p>
-                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 leading-relaxed">
-                  외부 브라우저에서 이용하시면 더 안정적으로 로그인할 수 있습니다.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={handleOpenExternal}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors"
-            >
-              {urlCopied ? '주소가 복사됐어요! Safari에서 붙여넣기 해주세요' : '외부 브라우저로 열기'}
-            </button>
-            {/iPhone|iPad|iPod/.test(typeof navigator !== 'undefined' ? navigator.userAgent : '') && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-500 text-center">
-                iOS: Safari 주소창에 붙여넣기 후 이용해주세요
-              </p>
-            )}
-          </div>
-        )}
 
         {/* 로그인 */}
         <div className="space-y-3">
