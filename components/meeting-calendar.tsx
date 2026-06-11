@@ -589,7 +589,7 @@ export function MeetingCalendar({
     const currentSlots = generateDailySchedule(selectedDate);
 
     return (
-      <Card className="flex flex-col overflow-hidden shadow-lg h-full relative">
+      <Card className="flex flex-col shadow-lg h-full relative">
         {readonly && (
           <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 flex items-center gap-2">
             <Lock className="h-4 w-4 text-amber-600" />
@@ -598,7 +598,7 @@ export function MeetingCalendar({
         )}
 
         {/* 헤더 */}
-        <div className="flex items-center justify-between bg-gradient-to-r from-primary/10 to-primary/5 p-3 shrink-0">
+        <div className="flex items-center justify-between bg-card bg-gradient-to-r from-primary/10 to-primary/5 p-3 shrink-0 sticky top-0 z-10 rounded-t-xl">
           <Button variant="ghost" size="icon" onClick={handleBackToMonth} className="hover:bg-primary/10">
             <ChevronLeft className="h-5 w-5" />
           </Button>
@@ -610,7 +610,7 @@ export function MeetingCalendar({
 
         {/* 스크롤 영역 - dayDragMode ON 시 터치 스크롤 차단 */}
         <div
-          className={cn('flex-1 relative', dayDragMode ? 'overflow-hidden touch-none' : 'overflow-y-auto')}
+          className={cn('flex-1 relative overflow-y-auto')}
           ref={scrollRef}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
