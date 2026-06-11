@@ -32,11 +32,9 @@ jobs:
         run: npm run build
 
       - name: Set up Docker Buildx
-        if: github.ref_name == 'main'
         uses: docker/setup-buildx-action@v3
 
       - name: Configure AWS credentials
-        if: github.ref_name == 'main'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -44,11 +42,9 @@ jobs:
           aws-region:            ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        if: github.ref_name == 'main'
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push production image
-        if: github.ref_name == 'main'
         run: |
           IMAGE=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO }}
           SHA=${{ github.sha }}
@@ -64,7 +60,6 @@ jobs:
           docker push $IMAGE:latest
 
       - name: Prune old ECR images (keep latest 3)
-        if: github.ref_name == 'main'
         run: |
           IMAGE_DETAILS=$(aws ecr describe-images \
             --repository-name ${{ env.ECR_REPO }} \
@@ -89,12 +84,10 @@ jobs:
           done
 
       - name: Get GitHub Actions IP
-        if: github.ref_name == 'main'
         id: ip
         run: echo "ipv4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
 
       - name: Configure AWS Security Group Allow
-        if: github.ref_name == 'main'
         run: |
           aws ec2 authorize-security-group-ingress \
             --group-id ${{ secrets.AWS_SG_ID }} \
@@ -103,7 +96,6 @@ jobs:
             --cidr ${{ steps.ip.outputs.ipv4 }}/32
 
       - name: Deploy to EC2
-        if: github.ref_name == 'main'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
@@ -142,7 +134,7 @@ jobs:
             docker image prune -f
 
       - name: Configure AWS Security Group Revoke
-        if: always() && github.ref_name == 'main' && steps.ip.outputs.ipv4 != ''
+        if: always() && steps.ip.outputs.ipv4 != ''
         run: |
           aws ec2 revoke-security-group-ingress \
             --group-id ${{ secrets.AWS_SG_ID }} \
