@@ -60,6 +60,11 @@ export function MeetingCalendar({
   const [dragStartIdx, setDragStartIdx] = useState<number | null>(null);
   const [dragEndIdx, setDragEndIdx] = useState<number | null>(null);
   const [dragTargetStatus, setDragTargetStatus] = useState<'POSSIBLE' | 'IMPOSSIBLE' | null>(null);
+  // 드래그 상태 ref - 짧은 탭(touchstart→touchend) 시 state 커밋 전 handleMouseUp이 stale 값을 읽는 race 방지
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef<number | null>(null);
+  const dragEndRef = useRef<number | null>(null);
+  const dragTargetRef = useRef<'POSSIBLE' | 'IMPOSSIBLE' | null>(null);
   // 일 뷰 모바일 토글
   const [dayDragMode, setDayDragMode] = useState(false);
 
@@ -344,27 +349,51 @@ export function MeetingCalendar({
   };
 
   // ── 일 뷰 드래그 핸들러 ──
+  const resetDayDrag = () => {
+    isDraggingRef.current = false;
+    dragStartRef.current = null;
+    dragEndRef.current = null;
+    dragTargetRef.current = null;
+    setIsDragging(false);
+    setDragStartIdx(null);
+    setDragEndIdx(null);
+    setDragTargetStatus(null);
+  };
+
   const handleMouseDown = (index: number, status: 'POSSIBLE' | 'IMPOSSIBLE' | 'UNSET') => {
     if (readonly) return;
+    const target: 'POSSIBLE' | 'IMPOSSIBLE' =
+      status === 'POSSIBLE' || status === 'UNSET' ? 'IMPOSSIBLE' : 'POSSIBLE';
+    // ref에 동기 반영 (탭처럼 짧은 동작에서도 handleMouseUp이 최신값을 읽도록)
+    isDraggingRef.current = true;
+    dragStartRef.current = index;
+    dragEndRef.current = index;
+    dragTargetRef.current = target;
     setIsDragging(true);
     setDragStartIdx(index);
     setDragEndIdx(index);
-    setDragTargetStatus(status === 'POSSIBLE' || status === 'UNSET' ? 'IMPOSSIBLE' : 'POSSIBLE');
+    setDragTargetStatus(target);
   };
 
   const handleMouseEnter = (index: number) => {
-    if (isDragging && !readonly) setDragEndIdx(index);
+    if (isDraggingRef.current && !readonly) {
+      dragEndRef.current = index;
+      setDragEndIdx(index);
+    }
   };
 
   const handleMouseUp = async () => {
-    if (readonly) { setIsDragging(false); return; }
-    if (!isDragging || dragStartIdx === null || dragEndIdx === null || !dragTargetStatus || !selectedDate || !currentParticipant) {
-      setIsDragging(false);
+    if (readonly) { resetDayDrag(); return; }
+    const startIdx = dragStartRef.current;
+    const endIdx = dragEndRef.current;
+    const target = dragTargetRef.current;
+    if (!isDraggingRef.current || startIdx === null || endIdx === null || !target || !selectedDate || !currentParticipant) {
+      resetDayDrag();
       return;
     }
 
-    const start = Math.min(dragStartIdx, dragEndIdx);
-    const end = Math.max(dragStartIdx, dragEndIdx);
+    const start = Math.min(startIdx, endIdx);
+    const end = Math.max(startIdx, endIdx);
     const currentSlots = generateDailySchedule(selectedDate);
     const selectedSlotNums: number[] = [];
 
@@ -376,14 +405,11 @@ export function MeetingCalendar({
     }
 
     if (selectedSlotNums.length === 0) {
-      setIsDragging(false);
-      setDragStartIdx(null);
-      setDragEndIdx(null);
-      setDragTargetStatus(null);
+      resetDayDrag();
       return;
     }
 
-    const payloads = buildPatchPayloadForSlots(selectedDate, selectedSlotNums, dragTargetStatus);
+    const payloads = buildPatchPayloadForSlots(selectedDate, selectedSlotNums, target);
 
     // 즉각 로컬 반영
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -393,20 +419,20 @@ export function MeetingCalendar({
       const idx = updated.timeStatuses.findIndex(ts => ts.date === dateStr);
       if (idx >= 0) {
         let existing = [...(updated.timeStatuses[idx].impossibleSlots || [])];
-        if (dragTargetStatus === 'IMPOSSIBLE') {
+        if (target === 'IMPOSSIBLE') {
           existing = Array.from(new Set([...existing, ...selectedSlotNums]));
         } else {
           existing = existing.filter(s => !selectedSlotNums.includes(s));
         }
         updated.timeStatuses[idx] = { ...updated.timeStatuses[idx], impossibleSlots: existing };
-      } else if (dragTargetStatus === 'IMPOSSIBLE') {
+      } else if (target === 'IMPOSSIBLE') {
         updated.timeStatuses.push({ date: dateStr, impossibleSlots: selectedSlotNums, status: 'IMPOSSIBLE' });
       }
       return updated;
     });
 
     setSlots(prev => prev.map((s, idx) => {
-      if (idx >= start && idx <= end && s.isCandidate) return { ...s, myStatus: dragTargetStatus! };
+      if (idx >= start && idx <= end && s.isCandidate) return { ...s, myStatus: target };
       return s;
     }));
 
@@ -419,10 +445,7 @@ export function MeetingCalendar({
       if (p) setLocalParticipant({ ...p, timeStatuses: [...(p.timeStatuses || [])] });
       toast({ title: '시간 업데이트에 실패했습니다.', variant: 'destructive' });
     } finally {
-      setIsDragging(false);
-      setDragStartIdx(null);
-      setDragEndIdx(null);
-      setDragTargetStatus(null);
+      resetDayDrag();
     }
   };
 
@@ -589,7 +612,7 @@ export function MeetingCalendar({
     const currentSlots = generateDailySchedule(selectedDate);
 
     return (
-      <Card className="flex flex-col shadow-lg h-full relative">
+      <Card className="flex flex-col shadow-lg h-full relative pt-0">
         {readonly && (
           <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 flex items-center gap-2">
             <Lock className="h-4 w-4 text-amber-600" />
@@ -597,20 +620,23 @@ export function MeetingCalendar({
           </div>
         )}
 
-        {/* 헤더 */}
-        <div className="flex items-center justify-between bg-card bg-gradient-to-r from-primary/10 to-primary/5 p-3 shrink-0 sticky top-0 z-10 rounded-t-xl">
-          <Button variant="ghost" size="icon" onClick={handleBackToMonth} className="hover:bg-primary/10">
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <h2 className="text-lg font-bold text-foreground">
-            {format(selectedDate, 'M월 d일 (E)', { locale: ko })}
-          </h2>
-          <div className="w-10" />
+        {/* 헤더 - 사각 불투명 마스크(bg-background)가 슬롯을 가리고, 그 위에 둥근 그라데이션 헤더 하나.
+            여백은 헤더 자체의 위쪽 패딩(pt-5)으로 흡수해 일체화 */}
+        <div className="sticky top-0 z-20 shrink-0 bg-background">
+          <div className="flex items-center justify-between rounded-t-xl bg-card bg-gradient-to-r from-primary/10 to-primary/5 p-3 pt-5">
+            <Button variant="ghost" size="icon" onClick={handleBackToMonth} className="hover:bg-primary/10">
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <h2 className="text-lg font-bold text-foreground">
+              {format(selectedDate, 'M월 d일 (E)', { locale: ko })}
+            </h2>
+            <div className="w-10" />
+          </div>
         </div>
 
-        {/* 스크롤 영역 - dayDragMode ON 시 터치 스크롤 차단 */}
+        {/* 슬롯 영역 - 스크롤은 외부 main이 담당 (단일 스크롤) */}
         <div
-          className={cn('flex-1 relative overflow-y-auto')}
+          className="relative"
           ref={scrollRef}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
@@ -681,10 +707,16 @@ export function MeetingCalendar({
                       const clampedIdx = Math.max(0, Math.min(23, calculatedIdx));
                       handleMouseEnter(clampedIdx);
                     }}
-                    onTouchEnd={handleMouseUp}
+                    onTouchEnd={(e) => {
+                      // 탭 후 합성 마우스/클릭 이벤트가 발생해 한 번 더 토글 → 상쇄되는 현상 방지
+                      e.preventDefault();
+                      handleMouseUp();
+                    }}
                     data-slot-index={index}
                     className={cn(
                       'h-14 border-t border-border/30 relative flex items-center transition-colors select-none',
+                      // 다중 선택 ON 시 슬롯 위 터치는 스크롤 대신 드래그 선택 (왼쪽 라벨 영역은 제외되어 스크롤 유지)
+                      dayDragMode && !readonly && 'touch-none',
                       slot.isCandidate
                         ? readonly ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:opacity-90'
                         : 'bg-muted/10 cursor-not-allowed opacity-50',
