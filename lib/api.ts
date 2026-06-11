@@ -39,6 +39,28 @@ export function getAccessToken(): string | null {
   return _accessToken;
 }
 
+// ── 토큰 재발급 single-flight ──────────────────────────────────────────────────
+// 메모리 access token 만료/부재 시 병렬 요청이 각자 /api/auth/me를 호출하면
+// BE refresh 회전이 동시 다발로 일어나 로그아웃 race를 유발한다.
+// 진행 중인 재발급이 있으면 그 Promise를 공유해 단 1회만 호출한다.
+let _refreshPromise: Promise<boolean> | null = null;
+
+function refreshAccessToken(): Promise<boolean> {
+  if (!_refreshPromise) {
+    _refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' });
+        const refreshed = res.headers.get('X-New-Access-Token');
+        if (refreshed) _accessToken = refreshed;
+        return res.ok;
+      } catch {
+        return false;
+      }
+    })().finally(() => { _refreshPromise = null; });
+  }
+  return _refreshPromise;
+}
+
 // ── 인증 코드 → Access Token 교환 ────────────────────────────────────────────
 export async function exchangeAuthCode(code: string): Promise<string> {
   const res = await fetch(`${API_BASE}/api/auth/token?code=${code}`, {
@@ -73,18 +95,12 @@ async function apiFetch(input: string, init?: RequestInit, _retried = false) {
   }
 
   // 401 발생 시 1회 토큰 갱신 후 재시도
-  // (SSE 연결 등 동시 요청으로 인한 token rotation race condition 방어)
+  // 동시 401들은 single-flight로 단 1회 /api/auth/me 재발급을 공유 → 회전 storm 방지
   if (res.status === 401 && !_retried) {
-    try {
-      const refreshRes = await fetch(`${API_BASE}/api/auth/me`, {
-        credentials: 'include',
-      });
-      const refreshed = refreshRes.headers.get('X-New-Access-Token');
-      if (refreshRes.ok && refreshed) {
-        _accessToken = refreshed;
-        return apiFetch(input, init, true);
-      }
-    } catch {}
+    const ok = await refreshAccessToken();
+    if (ok) {
+      return apiFetch(input, init, true);
+    }
     throw new Error('UNAUTHORIZED');
   }
 
