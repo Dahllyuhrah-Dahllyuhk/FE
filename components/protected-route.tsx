@@ -6,6 +6,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
 import { Suspense } from "react"
 import { SplashScreen } from "@/components/splash-screen"
+import { ConsentGate } from "@/components/consent-gate"
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -30,6 +31,9 @@ function ProtectedRouteInner({ children }: ProtectedRouteProps) {
   }
 
   if (!user) return null
+
+  // 현재 약관 버전에 미동의한 사용자는 동의 게이트를 먼저 통과해야 함
+  if (user.termsAgreed === false) return <ConsentGate />
 
   return <>{children}</>
 }
