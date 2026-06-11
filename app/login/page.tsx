@@ -1,17 +1,15 @@
 'use client';
 
-import { useEffect, Suspense, useState } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { API_BASE } from '@/lib/api';
-import Link from 'next/link';
 
 function LoginPageContent() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/';
-  const [ageChecked, setAgeChecked] = useState(false);
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -20,7 +18,6 @@ function LoginPageContent() {
   }, [isLoading, user, router, redirect]);
 
   const kakaoLogin = () => {
-    if (!ageChecked) return;
     if (redirect && redirect !== '/') {
       localStorage.setItem('login_redirect', redirect);
     }
@@ -43,22 +40,6 @@ function LoginPageContent() {
 
         {/* 로그인 */}
         <div className="space-y-3">
-          <label className="flex items-start gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={ageChecked}
-              onChange={(e) => setAgeChecked(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer flex-shrink-0"
-            />
-            <span className="text-xs text-muted-foreground leading-relaxed">
-              만 14세 이상이며{' '}
-              <Link href="/terms" className="underline hover:text-foreground">이용약관</Link>
-              {' '}및{' '}
-              <Link href="/privacy" className="underline hover:text-foreground">개인정보처리방침</Link>
-              에 동의합니다.
-            </span>
-          </label>
-
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <div className="h-5 w-5 rounded-full border-2 border-primary border-r-transparent animate-spin" />
@@ -66,8 +47,7 @@ function LoginPageContent() {
           ) : (
             <button
               onClick={kakaoLogin}
-              disabled={!ageChecked}
-              className="w-full flex items-center justify-center gap-2.5 h-12 rounded-xl bg-[#FEE500] text-[#191919] font-semibold text-sm hover:bg-[#F5DC00] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2.5 h-12 rounded-xl bg-[#FEE500] text-[#191919] font-semibold text-sm hover:bg-[#F5DC00] transition-colors"
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path fillRule="evenodd" clipRule="evenodd" d="M9 1C4.58172 1 1 3.80568 1 7.25C1 9.37033 2.27027 11.2412 4.22147 12.3836L3.39663 15.5547C3.33749 15.7784 3.59007 15.9547 3.78441 15.8237L7.5597 13.3938C8.02879 13.4632 8.51025 13.5 9 13.5C13.4183 13.5 17 10.6943 17 7.25C17 3.80568 13.4183 1 9 1Z" fill="#191919"/>

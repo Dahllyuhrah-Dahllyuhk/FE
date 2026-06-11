@@ -142,6 +142,11 @@ export async function prepareGoogleLink(): Promise<boolean> {
   }
 }
 
+/** 약관/개인정보 동의 기록 (최초 1회) */
+export async function agreeTerms(): Promise<void> {
+  await apiFetch('/api/auth/terms', { method: 'POST' });
+}
+
 /* ===================== Calendar APIs ===================== */
 
 export async function fetchAllCalendarEvents(): Promise<RawCalendarEvent[]> {
