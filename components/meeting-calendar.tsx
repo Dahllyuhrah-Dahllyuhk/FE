@@ -9,14 +9,12 @@ import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import {
-  fetchDailyAvailability,
   patchParticipantAvailability,
   type AvailabilitySlotUpdatePayload,
 } from '@/lib/api';
 import type {
   Meeting,
   TimeSlotAvailability,
-  DailyCountDto,
   ParticipantTimeStatus,
   MeetingParticipant,
 } from '@/types/meeting';
@@ -48,7 +46,6 @@ export function MeetingCalendar({
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [view, setView] = useState<'month' | 'day'>('month');
-  const [dailyStats, setDailyStats] = useState<Record<string, DailyCountDto>>({});
 
   // 로컬 participant 상태 - PATCH 후 즉각 반영용
   const [localParticipant, setLocalParticipant] = useState<MeetingParticipant | null>(null);
@@ -150,20 +147,10 @@ export function MeetingCalendar({
     [meeting, currentParticipant, todayStatus, totalParticipants, currentUserId]
   );
 
-  const loadDailyAvailability = useCallback(async () => {
-    try {
-      const stats = await fetchDailyAvailability(meeting.id);
-      setDailyStats(stats);
-    } catch {
-      toast({ title: '가용 시간 정보를 불러오지 못했습니다.', variant: 'destructive' });
-    }
-  }, [meeting.id]);
-
   useEffect(() => {
     const initialDate = new Date(meeting.requirement.dateRangeStart);
     setCurrentMonth(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
-    loadDailyAvailability();
-  }, [meeting.id, loadDailyAvailability]);
+  }, [meeting.id]);
 
   useEffect(() => {
     if (view === 'day' && scrollRef.current) {
