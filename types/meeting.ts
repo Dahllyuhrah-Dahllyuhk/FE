@@ -31,12 +31,6 @@ export type AvailableSlot = {
   end: string; // ISO 8601 Instant
 };
 
-export type DailyCountDto = {
-  date: string; // "yyyy-MM-dd"
-  totalParticipants: number;
-  availableParticipants: number;
-};
-
 export interface ParticipantTimeStatus {
   date: string; // "YYYY-MM-DD"
   impossibleSlots: number[]; // JSON 전송 시 배열

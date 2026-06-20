@@ -6,7 +6,6 @@ import type {
   ParticipantSettingsUpdateRequest,
   AvailableSlot,
   ParticipantTimeStatus,
-  DailyCountDto,
   MeetingStatusUpdateRequest,
 } from '@/types/meeting';
 
@@ -258,15 +257,6 @@ export async function fetchAvailableSlots(
   id: string
 ): Promise<AvailableSlot[]> {
   const res = await apiFetch(`/api/meetings/${id}/available-slots`, {
-    method: 'GET',
-  });
-  return res.json();
-}
-
-export async function fetchDailyAvailability(
-  id: string
-): Promise<Record<string, DailyCountDto>> {
-  const res = await apiFetch(`/api/meetings/${id}/daily-availability`, {
     method: 'GET',
   });
   return res.json();
