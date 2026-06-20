@@ -194,19 +194,24 @@ export function MeetingCalendar({
       });
     }
 
+    // 후보 시간대별로 '동시에 가능한 인원수'를 구해 그 날의 최댓값을 사용한다.
+    // (일간 화면의 시간대별 교집합 기준과 일치 — 전원이 동시에 되는 시간이 있어야 '전원 가능')
+    const acceptedParticipants = meeting.participants.filter((p) => p.status !== 'PENDING');
+    const pendingCount = meeting.participants.length - acceptedParticipants.length;
+
     let availableCount = 0;
-    meeting.participants.forEach((participant) => {
-      if (participant.status === 'PENDING') return;
-      const effectiveTs = participant.userId === currentUserId
-        ? localParticipant?.timeStatuses?.find(t => t.date === dateKey)
-        : participant.timeStatuses?.find((t) => t.date === dateKey);
-      const impossibleSlots = effectiveTs?.impossibleSlots || [];
-      if (candidateHours.some((hour) => !impossibleSlots.includes(hour))) {
-        availableCount++;
-      }
+    candidateHours.forEach((hour) => {
+      let simultaneous = 0;
+      acceptedParticipants.forEach((participant) => {
+        const effectiveTs = participant.userId === currentUserId
+          ? localParticipant?.timeStatuses?.find((t) => t.date === dateKey)
+          : participant.timeStatuses?.find((t) => t.date === dateKey);
+        const impossibleSlots = effectiveTs?.impossibleSlots || [];
+        if (!impossibleSlots.includes(hour)) simultaneous++;
+      });
+      if (simultaneous > availableCount) availableCount = simultaneous;
     });
 
-    const pendingCount = meeting.participants.filter((p) => p.status === 'PENDING').length;
     return {
       availableCount,
       totalParticipants: totalCount,
