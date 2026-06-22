@@ -1,11 +1,11 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Home, Calendar, Users, User } from 'lucide-react';
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const navItems = [
     { href: '/', icon: Home, label: '홈' },
@@ -23,9 +23,12 @@ export function BottomNav() {
           const Icon = item.icon;
           const isActive = pathname === item.href;
           return (
-            <Link
+            // <Link>(React transition 기반) 네비게이션이 iOS Chrome(WebKit)에서 간헐적으로
+            // 막히는 문제가 있어, 명령형 router.push로 이동한다. (router.push는 정상 동작 확인됨)
+            <button
               key={item.href}
-              href={item.href}
+              type="button"
+              onClick={() => { if (pathname !== item.href) router.push(item.href); }}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-colors ${
                 isActive
                   ? 'text-primary'
@@ -34,7 +37,7 @@ export function BottomNav() {
             >
               <Icon className={`h-5 w-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
               <span className={`text-[10px] font-medium ${isActive ? 'font-semibold' : ''}`}>{item.label}</span>
-            </Link>
+            </button>
           );
         })}
       </div>
