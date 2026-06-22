@@ -6,6 +6,7 @@ import { AuthProvider } from '@/context/auth-context';
 import { EventRefreshProvider } from '@/hooks/useEventRefresh';
 import { Toaster } from '@/components/ui/toaster';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { NavDebug } from '@/components/nav-debug';
 import './globals.css';
 
 const _geist = Geist({ subsets: ['latin'] });
@@ -68,6 +69,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
+        <NavDebug />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ErrorBoundary>
             <EventRefreshProvider>
