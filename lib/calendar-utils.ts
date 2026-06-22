@@ -8,11 +8,21 @@ export function mapRawToCalendarEvent(raw: any, idx: number) {
     'bg-pink-500',
   ];
 
+  // 서버 색이 없을 때의 fallback 색은 이벤트 id로부터 결정적으로 계산한다.
+  // (배열 인덱스 기반이면 이벤트 추가/삭제 시 순서가 밀려 다른 이벤트 색이 바뀌는 버그가 생김)
+  const stableIndex = (id: unknown): number => {
+    const s = String(id ?? '');
+    if (s.length === 0) return idx; // id가 없으면 기존 동작(인덱스) 유지
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  };
+
   const serverColor: string | undefined = raw.color ?? undefined;
   const baseColor =
     serverColor && serverColor.trim().length > 0
       ? serverColor.trim()
-      : palette[idx % palette.length];
+      : palette[stableIndex(raw.id) % palette.length];
 
   // allDay인 경우: 날짜 문자열을 신뢰해 로컬 자정으로 변환
   if (raw.allDay) {
