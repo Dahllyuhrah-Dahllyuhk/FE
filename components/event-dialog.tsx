@@ -237,7 +237,7 @@ export function EventDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row items-center gap-2 px-5 pb-5 pt-0">
+        <DialogFooter className="flex flex-row items-center justify-end gap-2 px-5 pb-5 pt-0">
           {event && (
             <button
               onClick={handleDelete}
