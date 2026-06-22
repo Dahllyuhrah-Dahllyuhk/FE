@@ -7,7 +7,6 @@ import {
   useState,
   useMemo,
   useCallback,
-  useTransition,
 } from 'react';
 import { ChevronLeft, ChevronRight, X, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -258,8 +257,6 @@ export function Calendar({
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const dialogJustOpenedRef = useRef(false);
 
-  const [isPending, startTransition] = useTransition();
-
   // 성능 파라미터
   const INITIAL_BEFORE = 2;
   const INITIAL_AFTER = 2;
@@ -373,14 +370,12 @@ export function Calendar({
 
         const previousScrollHeight = container.scrollHeight;
 
-        startTransition(() => {
-          setDisplayMonths((prev) => {
-            const filtered = filterDuplicateMonths(prev, toAdd);
-            if (filtered.length === 0) return prev;
-            const newMonths = [...filtered, ...prev];
-            onMonthChangeRef.current?.(newMonths);
-            return newMonths;
-          });
+        setDisplayMonths((prev) => {
+          const filtered = filterDuplicateMonths(prev, toAdd);
+          if (filtered.length === 0) return prev;
+          const newMonths = [...filtered, ...prev];
+          onMonthChangeRef.current?.(newMonths);
+          return newMonths;
         });
 
         requestAnimationFrame(() => {
@@ -401,14 +396,12 @@ export function Calendar({
         for (let i = 1; i <= LOAD_CHUNK; i++) {
           toAdd.push(addMonths(last, i));
         }
-        startTransition(() => {
-          setDisplayMonths((prev) => {
-            const filtered = filterDuplicateMonths(prev, toAdd);
-            if (filtered.length === 0) return prev;
-            const newMonths = [...prev, ...filtered];
-            onMonthChangeRef.current?.(newMonths);
-            return newMonths;
-          });
+        setDisplayMonths((prev) => {
+          const filtered = filterDuplicateMonths(prev, toAdd);
+          if (filtered.length === 0) return prev;
+          const newMonths = [...prev, ...filtered];
+          onMonthChangeRef.current?.(newMonths);
+          return newMonths;
         });
       }
     },
