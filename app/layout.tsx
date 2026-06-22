@@ -70,12 +70,12 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ErrorBoundary>
-            <AuthProvider>
-              <EventRefreshProvider>
+            <EventRefreshProvider>
+              <AuthProvider>
                 {children}
                 <Toaster />
-              </EventRefreshProvider>
-            </AuthProvider>
+              </AuthProvider>
+            </EventRefreshProvider>
           </ErrorBoundary>
         </ThemeProvider>
       </body>
