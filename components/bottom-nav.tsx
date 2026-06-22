@@ -35,7 +35,10 @@ export function BottomNav() {
             <button
               key={item.href}
               type="button"
-              onClick={() => { if (pathname !== item.href) router.push(item.href); }}
+              // iOS Chrome 동적 툴바로 인해 fixed 하단 탭에서 click이 버튼에 도달하지 못하고
+              // HTML로 retarget되는 문제가 있어(진단으로 확인), pointerdown으로 네비게이션한다.
+              // pointerdown은 버튼에 정상 도달함이 확인됨.
+              onPointerDown={() => { if (pathname !== item.href) router.push(item.href); }}
               className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 transition-colors ${
                 isActive
                   ? 'text-primary'
