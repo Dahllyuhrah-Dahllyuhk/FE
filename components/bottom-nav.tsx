@@ -15,8 +15,15 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t border-border/40"
-      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }}
+    <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-background border-t border-border/40"
+      style={{
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)',
+        // iOS WebKit에서 fixed + backdrop-filter 요소의 히트테스트가 깨져 탭이 안 먹는 문제 회피:
+        // backdrop-blur 제거(불투명 배경), z 상향, 독립 stacking context + 터치 보장
+        isolation: 'isolate',
+        touchAction: 'manipulation',
+        pointerEvents: 'auto',
+      }}
     >
       <div className="flex items-center justify-around pt-1">
         {navItems.map((item) => {
