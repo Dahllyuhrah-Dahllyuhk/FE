@@ -64,6 +64,16 @@ function LoginPageContent() {
             </div>
           )}
         </div>
+
+        <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+          <a href="/terms" className="hover:text-foreground underline underline-offset-2">
+            이용약관
+          </a>
+          <span aria-hidden="true">·</span>
+          <a href="/privacy" className="hover:text-foreground underline underline-offset-2">
+            개인정보처리방침
+          </a>
+        </div>
       </div>
     </div>
   );
