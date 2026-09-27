@@ -1,42 +1,15 @@
 'use client';
 
-import { useEffect, Suspense, useState } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/auth-context';
 import { API_BASE } from '@/lib/api';
-import Link from 'next/link';
-
-function detectInAppBrowser(): { isInApp: boolean; name: string } {
-  if (typeof navigator === 'undefined') return { isInApp: false, name: '' };
-  const ua = navigator.userAgent;
-  if (/KAKAOTALK/i.test(ua)) return { isInApp: true, name: '카카오톡' };
-  if (/NAVER/i.test(ua)) return { isInApp: true, name: '네이버' };
-  if (/Instagram/i.test(ua)) return { isInApp: true, name: '인스타그램' };
-  if (/FB_IAB|FBAN|FBAV/i.test(ua)) return { isInApp: true, name: '페이스북' };
-  if (/Line\//i.test(ua)) return { isInApp: true, name: 'LINE' };
-  return { isInApp: false, name: '' };
-}
-
-function openInExternalBrowser() {
-  const ua = navigator.userAgent;
-  const url = window.location.href;
-  if (/Android/.test(ua)) {
-    window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
-  }
-}
 
 function LoginPageContent() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/';
-  const [ageChecked, setAgeChecked] = useState(false);
-  const [inAppInfo, setInAppInfo] = useState<{ isInApp: boolean; name: string }>({ isInApp: false, name: '' });
-  const [urlCopied, setUrlCopied] = useState(false);
-
-  useEffect(() => {
-    setInAppInfo(detectInAppBrowser());
-  }, []);
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -44,20 +17,7 @@ function LoginPageContent() {
     }
   }, [isLoading, user, router, redirect]);
 
-  const handleOpenExternal = () => {
-    openInExternalBrowser();
-    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(window.location.href).then(() => {
-          setUrlCopied(true);
-          setTimeout(() => setUrlCopied(false), 3000);
-        });
-      }
-    }
-  };
-
   const kakaoLogin = () => {
-    if (!ageChecked) return;
     if (redirect && redirect !== '/') {
       localStorage.setItem('login_redirect', redirect);
     }
@@ -78,52 +38,8 @@ function LoginPageContent() {
           </div>
         </div>
 
-        {/* 인앱브라우저 안내 */}
-        {inAppInfo.isInApp && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800/40 p-4 space-y-3">
-            <div className="flex items-start gap-2.5">
-              <span className="text-lg flex-shrink-0">⚠️</span>
-              <div>
-                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-                  {inAppInfo.name} 앱에서는 카카오 로그인이 제한될 수 있습니다
-                </p>
-                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 leading-relaxed">
-                  외부 브라우저에서 이용하시면 더 안정적으로 로그인할 수 있습니다.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={handleOpenExternal}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors"
-            >
-              {urlCopied ? '주소가 복사됐어요! Safari에서 붙여넣기 해주세요' : '외부 브라우저로 열기'}
-            </button>
-            {/iPhone|iPad|iPod/.test(typeof navigator !== 'undefined' ? navigator.userAgent : '') && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-500 text-center">
-                iOS: Safari 주소창에 붙여넣기 후 이용해주세요
-              </p>
-            )}
-          </div>
-        )}
-
         {/* 로그인 */}
         <div className="space-y-3">
-          <label className="flex items-start gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={ageChecked}
-              onChange={(e) => setAgeChecked(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer flex-shrink-0"
-            />
-            <span className="text-xs text-muted-foreground leading-relaxed">
-              만 14세 이상이며{' '}
-              <Link href="/terms" className="underline hover:text-foreground">이용약관</Link>
-              {' '}및{' '}
-              <Link href="/privacy" className="underline hover:text-foreground">개인정보처리방침</Link>
-              에 동의합니다.
-            </span>
-          </label>
-
           {isLoading ? (
             <div className="flex items-center justify-center py-4">
               <div className="h-5 w-5 rounded-full border-2 border-primary border-r-transparent animate-spin" />
@@ -131,8 +47,7 @@ function LoginPageContent() {
           ) : (
             <button
               onClick={kakaoLogin}
-              disabled={!ageChecked}
-              className="w-full flex items-center justify-center gap-2.5 h-12 rounded-xl bg-[#FEE500] text-[#191919] font-semibold text-sm hover:bg-[#F5DC00] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2.5 h-12 rounded-xl bg-[#FEE500] text-[#191919] font-semibold text-sm hover:bg-[#F5DC00] transition-colors"
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path fillRule="evenodd" clipRule="evenodd" d="M9 1C4.58172 1 1 3.80568 1 7.25C1 9.37033 2.27027 11.2412 4.22147 12.3836L3.39663 15.5547C3.33749 15.7784 3.59007 15.9547 3.78441 15.8237L7.5597 13.3938C8.02879 13.4632 8.51025 13.5 9 13.5C13.4183 13.5 17 10.6943 17 7.25C17 3.80568 13.4183 1 9 1Z" fill="#191919"/>
@@ -148,6 +63,16 @@ function LoginPageContent() {
               </p>
             </div>
           )}
+        </div>
+
+        <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+          <a href="/terms" className="hover:text-foreground underline underline-offset-2">
+            이용약관
+          </a>
+          <span aria-hidden="true">·</span>
+          <a href="/privacy" className="hover:text-foreground underline underline-offset-2">
+            개인정보처리방침
+          </a>
         </div>
       </div>
     </div>

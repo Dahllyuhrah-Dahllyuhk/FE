@@ -8,7 +8,10 @@ import { EventDetailModal } from '@/components/event-detail-modal';
 import { BottomNav } from '@/components/bottom-nav';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ProtectedRoute } from '@/components/protected-route';
+import { useAuth } from '@/context/auth-context';
+import { SplashScreen } from '@/components/splash-screen';
+import { ConsentGate } from '@/components/consent-gate';
+import { LandingPage } from '@/components/landing-page';
 
 import {
   fetchAllCalendarEvents,
@@ -25,7 +28,17 @@ import { useEventRefresh } from '@/hooks/useEventRefresh';
 import { fetchEvents } from '@/app/api/calendar/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { OnboardingBanner } from '@/components/onboarding-banner';
-export default function HomePage() {
+export default function RootPage() {
+  const { user, isLoading } = useAuth();
+  // 로그아웃 상태: 공개 랜딩 페이지(로그인 없이 접근 가능 — Google OAuth 검증 요건 + 서비스 소개)
+  if (isLoading) return <SplashScreen />;
+  if (!user) return <LandingPage />;
+  // 약관 미동의 사용자는 동의 게이트 먼저
+  if (user.termsAgreed === false) return <ConsentGate />;
+  return <CalendarApp />;
+}
+
+function CalendarApp() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -40,7 +53,7 @@ export default function HomePage() {
   const [colorMap, setColorMap] = useState<Map<string, string>>(new Map());
 
   const isMobile = useIsMobile();
-  const { trigger, refresh } = useEventRefresh();
+  const { trigger } = useEventRefresh();
   const { toast } = useToast();
 
   const initialLoadDoneRef = useRef(false);
@@ -97,59 +110,9 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trigger]);
 
-  // SSE 부분 패치 — events-changed 이벤트만 여기서 처리
-  useEffect(() => {
-    let es: EventSource;
-    let retryTimeout: ReturnType<typeof setTimeout>;
-
-    const connect = () => {
-      const accessToken = getAccessToken();
-      const sseUrl = accessToken
-        ? `${API_BASE}/api/sse/events?token=${encodeURIComponent(accessToken)}`
-        : `${API_BASE}/api/sse/events`;
-
-      es = new EventSource(sseUrl, { withCredentials: true });
-
-      es.addEventListener('events-changed', (e: MessageEvent) => {
-        try {
-          const { changed, deletedIds } = JSON.parse(e.data) as {
-            changed: RawCalendarEvent[];
-            deletedIds: string[];
-          };
-          setEvents((prev) => {
-            let next = [...prev];
-            if (deletedIds?.length) {
-              next = next.filter((ev) => !deletedIds.includes(ev.id));
-            }
-            if (changed?.length) {
-              for (const raw of changed) {
-                const mapped = mapRawToCalendarEvent(raw, 0);
-                const idx = next.findIndex((ev) => ev.id === mapped.id);
-                if (idx >= 0) next[idx] = mapped;
-                else next.push(mapped);
-              }
-              next.sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-            }
-            return next;
-          });
-        } catch {
-          refresh();
-        }
-      });
-
-      es.onerror = () => {
-        es.close();
-        retryTimeout = setTimeout(connect, 5000);
-      };
-    };
-
-    connect();
-
-    return () => {
-      clearTimeout(retryTimeout);
-      es?.close();
-    };
-  }, [refresh]);
+  // SSE는 전역 useSseSync(AuthProvider) 한 곳에서만 연결한다.
+  // events-changed/updated 수신 시 refresh()로 trigger가 증가하면 위 [trigger] effect가 전체 재조회.
+  // (홈에서 별도 EventSource를 또 열면 모바일 WebKit의 도메인당 SSE 슬롯이 누적되어 화면 멈춤 유발)
 
   const handleMonthChange = useCallback(
     async (months: Date[]) => {
@@ -387,8 +350,7 @@ export default function HomePage() {
   };
 
   return (
-    <ProtectedRoute>
-      <div className="flex min-h-screen flex-col bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
         <header className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
           <div className="flex items-center justify-between px-4 h-12">
             <h1 className="text-sm font-semibold text-foreground tracking-tight">
@@ -452,6 +414,5 @@ export default function HomePage() {
 
         <BottomNav />
       </div>
-    </ProtectedRoute>
   );
 }

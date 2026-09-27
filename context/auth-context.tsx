@@ -17,6 +17,7 @@ type User = {
   nickname: string;
   profileImageUrl?: string | null;
   createdAt?:string;
+  termsAgreed?: boolean;
 };
 
 type AuthContextType = {
@@ -61,7 +62,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         id: data.id,
         nickname: data.nickname,
         profileImageUrl: data.profileImageUrl,
-        createdAt: data.createdAt
+        createdAt: data.createdAt,
+        termsAgreed: data.termsAgreed,
       });
     } catch (e) {
       // 인증 실패 — 조용히 처리 (미로그인 상태는 정상)
